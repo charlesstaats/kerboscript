@@ -96,7 +96,7 @@ function Launch {
             Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
             Set control:yaw to CONTROL_FACTOR * pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
             Set control:pitch to CONTROL_FACTOR * (0.06 - pid_pitch:update(time:seconds, CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:facing:forevector)))).  // Because the cockpit's "ceiling" is towards the ground, need to reverse the pitch control.
-            If ship:velocity:surface:mag < 1300 { Return true. }
+            If altitude < 50000 and ship:velocity:surface:mag < 1300 { Return true. }
 
             Set control:neutralize to true.
             SAS on.

@@ -4,7 +4,7 @@ size(200, 200, keepAspect=false);
 import math;
 import graph;
 
-string filename = "descent_log.csv";
+string filename = "prime_descent_log.csv";
 file in = input(filename).line().csv();
 string[] header;
 real[][] data;
@@ -45,8 +45,8 @@ for (real[] datapoint : data) {
   datapoint.push(energy_over_mass);
 }
 
-file outfile = output('descent_profile_light.csv');
-write(outfile, "time,altitude,phase,airspeed,ergy", suffix=endl);
+file outfile = output('prime_descent_profile.csv');
+write(outfile, "time,altitude,phase,airspeed,specific_energy", suffix=endl);
 for (real[] datapoint : data) {
   for (int i = 0; i < datapoint.length; ++i) {
     write(outfile, datapoint[i], suffix=(i + 1 == datapoint.length ? endl : comma));

@@ -1,5 +1,6 @@
 @LAZYGLOBAL OFF.
 
+Parameter profile is "0:/silver_dragon/prime_descent_profile.csv".
 Runpath("0:/KSlib/library/lib_enum").
 Runpath("0:/KSlib/library/lib_navigation").
 Runpath("0:/my_lib/bisect").
@@ -25,7 +26,8 @@ Transfer_order:activate().
 Wait until transfer_order:done().
 
 // Wait until we arrive at the appropriate place in orbit.
-Local function ergy {
+
+Local function specific_energy {
   Local radius is Kerbin:radius.
   Local speed is ship:velocity:surface:mag.
   Local kinetic is speed * speed / 2.
@@ -33,22 +35,37 @@ Local function ergy {
   Return kinetic + potential.
 }
 
-Local LOG_TRAJECTORY to false.
-If LOG_TRAJECTORY {
-  Local log_file is "0:/silver_dragon/descent_log.csv".
-  Log "time,altitude,phase_angle,airspeed,ergy" to log_file.
-  Local next_log_time is time:seconds.
-  When time:seconds >= next_log_time then {
-    Set next_log_time to next_log_time + (choose 10 if altitude > 15000 else 1).
-
-    Local logentry is time:seconds + "," +
-                      altitude + "," +
-                      phaseAngle() + "," +
-                      ship:velocity:surface:mag + "," +
-                      round(ergy()).
-    Log logentry to log_file.
-    Return true.
+Local airbrakes is ship:partsdubbedpattern("airbrake").
+Local function deployed {
+  Parameter airbrake.
+  Return airbrake:getmodule("ModuleAeroSurface"):getfield("deploy").
+}
+Local function set_airbrakes {
+  Parameter brake_power.
+  
+  For airbrake in airbrakes {
+    If deployed(airbrake) {
+      Local power is clip(brake_power, 0, 0.9 / 0.7).
+      Airbrake:getmodule("ModuleAeroSurface"):setfield("deploy angle", 0.7 * power * 100).
+    }
   }
+}
+Local function unlock_steering_airbrakes {
+  
+  For airbrake in airbrakes {
+    If not deployed(airbrake) {
+      Local module to airbrake:getmodule("ModuleAeroSurface").
+      Module:setfield("yaw", false).  // Confusingly, "false" means active, "true" means inactive.
+      Module:setfield("pitch", false).  // Confusingly, "false" means active, "true" means inactive.
+    }
+  }
+}
+
+Local LOG_TRAJECTORY to true.
+Local phase_angle to phaseAngle().
+On time:seconds {
+  Set phase_angle to phaseAngle().
+  Return true.
 }
 
 Local function angle_to_std_range {
@@ -65,9 +82,9 @@ Local angle_to_standard_range is angle_to_std_range@.
 
 Local altitude_data is list().
 Local phase_data is list().
-Local ergy_data is list().
+Local specific_energy_data is list().
 Local header_seen is false.
-For line in open("0:/silver_dragon/descent_profile.csv"):readall {
+For line in open(profile):readall {
   If not header_seen {
     Set header_seen to true.
   } else {
@@ -80,45 +97,64 @@ For line in open("0:/silver_dragon/descent_profile.csv"):readall {
     Phase_data:add(tmp).
     Set tmp to numbers[4]:tonumber(-1e99).
     If tmp < -1e98 { Print 0/0. }.
-    Ergy_data:add(tmp).
+    specific_energy_data:add(tmp).
   }
 }
 
+Local pivot to 540.
 Local start_at_phase is angle_to_std_range(phase_data[0]).
 // Reverse the data since "interpolate" expects phase_data to be sorted in ascending order.
 Set altitude_data to Enum:reverse(altitude_data).
 Set phase_data to Enum:reverse(phase_data).
-Set ergy_data to Enum:reverse(ergy_data).
+Set specific_energy_data to Enum:reverse(specific_energy_data).
 
-Local function expected_ergy_at {
+Local function expected_specific_energy_at {
   Parameter phase.
-  Set phase to angle_to_std_range(phase, 359).
-  Return interpolate(phase, phase_data, ergy_data).
+  Set phase to angle_to_std_range(phase, pivot).
+  Return interpolate(phase, phase_data, specific_energy_data).
 }
 
 Local function expected_alt_at {
   Parameter phase.
-  Set phase to angle_to_std_range(phase, 359).
+  Set phase to angle_to_std_range(phase, pivot).
   Return interpolate(phase, phase_data, altitude_data).
 }
-
 
 Local print_phase is true.
 Local next_print_phase_time is time:seconds.
 When time:seconds >= next_print_phase_time then {
   If not print_phase { Return false. }.
-  HUDText("Angle from starting point: " + angle_to_standard_range(phaseAngle() - start_at_phase, 10), 50 / kuniverse:timewarp:rate, 1, 15, green, false).
+  HUDText("Angle from starting point: " + angle_to_standard_range(phase_angle - start_at_phase, 10),
+          50 / kuniverse:timewarp:rate, 1, 15, green, false).
   Set next_print_phase_time to time:seconds + 10.
   Return print_phase.
 }
 
-Wait until angle_to_standard_range(phaseAngle() - start_at_phase, 10) >= 0.
+Wait until angle_to_standard_range(phase_angle - start_at_phase, 10) >= 0.
 Kuniverse:timewarp:cancelwarp().
 Print "canceling warp.".
 
-Wait until angle_to_standard_range(phaseAngle() - start_at_phase, 10) <= 0.
+Wait until angle_to_standard_range(phase_angle - start_at_phase, 10) <= 0.
 Print "current warp rate: " + kuniverse:timewarp:rate.
 Set print_phase to false.
+
+If LOG_TRAJECTORY {
+  Local log_file is "0:/silver_dragon/prime_descent_log.csv".
+  Log "time,altitude,phase_angle,airspeed,specific_energy" to log_file.
+  Local next_log_time is time:seconds.
+  When time:seconds >= next_log_time then {
+    Set next_log_time to next_log_time + (choose 10 if altitude > 15000 else 1).
+
+    Local logentry is time:seconds + "," +
+                      altitude + "," +
+                      phaseAngle() + "," +
+                      ship:velocity:surface:mag + "," +
+                      round(specific_energy()).
+    Log logentry to log_file.
+    Return true.
+  }
+}
+
 
 SAS on.
 Set navmode to "orbit".
@@ -132,31 +168,12 @@ Unlock throttle.
 AG4 on.  // Allow booster tank to pump fuel to fake RCS engines.
 FakeRCS:engage().
 
-Local airbrakes is ship:partsdubbedpattern("airbrake").
-Local function deployed {
-  Parameter airbrake.
-  Return airbrake:getmodule("ModuleAeroSurface"):getfield("deploy").
+When angle_to_std_range(phase_angle, pivot) < 359 then {
+  Set pivot to 359.
 }
-Local function set_airbrakes {
-  Parameter brake_power.
-  
-  For airbrake in airbrakes {
-    If deployed(airbrake) {
-      Local power is clip(brake_power, 0, 1).
-      Airbrake:getmodule("ModuleAeroSurface"):setfield("authority limiter", power * 100).
-    }
-  }
-}
-Local function unlock_steering_airbrakes {
-  Parameter steering_power.
-  
-  For airbrake in airbrakes {
-    If not deployed(airbrake) {
-      Local power is clip(steering_power, 0, 1).
-      Airbrake:getmodule("ModuleAeroSurface"):setfield("authority limiter", power * 100).
-    }
-  }
-}
+
+Local pid_specific_energy is pidloop(0.1, 0.05, 0.0, -0.25, 0.25).
+Local pid_alt is pidloop(0.0001, 0, 0.04).
 
 Local function lock_altitude_retrograde {
   Parameter lock_while_fn.
@@ -178,7 +195,6 @@ Local function lock_altitude_retrograde {
   Local pid_pitch is pidloop(4.0, 0, 32.0, -1, 1).
   Local pid_yaw is pidloop(4.0, 0, 32.0, -1, 1).
 
-  Local pid_alt is pidloop(0.0001, 0, 0.04).
   Local target_direction is ship:srfretrograde:forevector.
   
   Local MAX_VERTICAL_SHIFT to Constant:DegToRad * 15.
@@ -188,9 +204,10 @@ Local function lock_altitude_retrograde {
   On time:seconds {
     Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
     Local vertical_shift to ship:up:forevector * pid_alt:update(
-        time:seconds, altitude - expected_alt_at(phaseAngle())).
+        time:seconds, altitude - expected_alt_at(phase_angle)).
     If time:seconds >= next_print_alt_time {
-      HUDText("altitude error: " + pid_alt:input, 50 / kuniverse:timewarp:rate, 1, 15, green, false).
+      HUDText("altitude error: " + round(pid_alt:input, 1) + "m", 50 / kuniverse:timewarp:rate, 1, 15, green, false).
+      HUDText("specific energy error: " + round(-pid_specific_energy:input, 1) + " m^2/s^2", 50 / kuniverse:timewarp:rate, 3, 15, green, false).
       Set next_print_alt_time to time:seconds + 10.
     }
     If vertical_shift:mag > MAX_VERTICAL_SHIFT {
@@ -249,16 +266,15 @@ Lock_altitude_retrograde({ Return srf_retrograde. }).
 When altitude < 70000 then {
   // We are in the atmosphere now.
   Brakes on.
-  Local pid_ergy is pidloop(0.1, 0.05, 0.0, -0.25, 0.25).
   Set_airbrakes(0.75).
-  Unlock_steering_airbrakes(0.2).
+  Unlock_steering_airbrakes().
   On time:seconds {
     If alt:radar < 20000 {
       Set_airbrakes(1.0).
       Return false.
     }
 
-    Set_airbrakes(0.75 + pid_ergy:update(time:seconds, expected_ergy_at(phaseAngle()) - 1000 - ergy())).
+    Set_airbrakes(0.75 + pid_specific_energy:update(time:seconds, expected_specific_energy_at(phaseAngle()) - specific_energy())).
     Return true.
   }
 }
@@ -266,9 +282,9 @@ When altitude < 70000 then {
 When alt:radar < 20000 then {
   Lock srf_retrograde to false.
   Lock_anti_target().
-  When ship:velocity:surface:mag < 300 then {
-    Unlock_steering_airbrakes(1.0).
-  }
+  //When ship:velocity:surface:mag < 300 then {  // NOTE: When https://github.com/KSP-KOS/KOS/issues/2666 is fixed, restore this.
+    //Unlock_steering_airbrakes(1.0).
+  //}
   When alt:radar < 1000 then {
     Local bounds to ship:bounds.
     Local pid_thrust is pidloop(0.125, 0, 0.45, 0, 1).
@@ -279,15 +295,11 @@ When alt:radar < 20000 then {
          then
     {
       Set pid_thrust:setpoint to
-          choose -0.5
+          choose -0.2
           if abs(altitude - alt:radar) > 10 
           else -7.0.  // water landing
     }
   }
-}
-
-When ship:velocity:surface:mag < 5 then {
-  Gear on.
 }
 
 Local bounds is ship:bounds.
@@ -296,7 +308,7 @@ Local function distortion_vector {
   Local upvec to up:forevector:normalized.
   Local targetvec to target_position.
   Set targetvec to targetvec - vdot(targetvec, upvec) * upvec.
-  If targetvec:mag > 1000 { Set targetvec to V(0,0,0). }  // The "abort" case.
+  If targetvec:mag > 1500 { Set targetvec to V(0,0,0). }  // The "abort" case.
   Return 0.17 * targetvec + 20 * upvec.
 }
 

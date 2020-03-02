@@ -1,12 +1,7 @@
 @LAZYGLOBAL OFF.
 
+Runpath("0:/my_lib/clip").
 Runpath("0:/pump_fuel").
-
-local function clip {
-  Parameter t, low is -1.0, high is 1.0.
-
-  Return min(high, max(low, t)).
-}
 
 Local function define_update_eta {
   Local pid_eta is pidloop(0, 0, 1.0).
@@ -53,8 +48,8 @@ function Launch {
   Lock throttle to pid_pressure:update(time:seconds, ship:Q).
 
 
-  Local pid_pitch is pidloop(0.4, 2.0, 0.4, -1, 1).
-  Local pid_yaw is pidloop(0.4, 0.8, 0.4, -1, 1).
+  Local pid_pitch is pidloop(3.2, 16.0, 0.0, -1, 1).
+  Local pid_yaw is pidloop(3.2, 6.4, 0.0, -1, 1).
   Local pid_roll is pidloop(0.3, 0.01, 0.4, -0.4, 0.4).
   Local initial_ascent to true.
 
@@ -73,9 +68,9 @@ function Launch {
     Set initial_ascent to false.
     Set control:pitch to 0.05.
     Local pid_roll is pidloop(0.2, 0.4, 0.2, -1, 1).
-    Local pid_yaw is pidloop(0.25, 0.15, 1.0, -1, 1).
-    Local pid_pitch is pidloop(0.5, 0.15, 1.0, -0.5, 0.5).
-    Set pid_pitch:setpoint to 8 * CONSTANT:DegToRad. 
+    Local pid_yaw is pidloop(2.0, 1.2, 8.0, -1, 1).
+    Local pid_pitch is pidloop(4.0, 1.2, 8.0, -1.0, 1.0).
+    Set pid_pitch:setpoint to 6 * CONSTANT:DegToRad. 
     On time:seconds {
       Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
       Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
@@ -83,8 +78,8 @@ function Launch {
       If vang(ship:facing:forevector, ship:up:vector) < TURN_ANGLE {
         Return true.
       } else {
-        Local pi_pitch to pidloop(-0.5, 0.1, 0.0).  // Negative pk to counteract aerodynamic stability.
-        Local dd_pitch to pidloop(0.2, 0, 0.2, -1.0, 1.0).
+        Local pi_pitch to pidloop(0.5, 0.1, 0.0).
+        Local dd_pitch to pidloop(0.4, 0, 0.2, -1.0, 1.0).
         On time:seconds {
           Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
           Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
@@ -95,7 +90,7 @@ function Launch {
             Return true.
           }
           Print "now following prograde".
-          Set pid_pitch to pidloop(0.5, 0.15, 1.0, -0.5, 0.5).
+          Set pid_pitch to pidloop(4.0, 1.2, 8.0, -0.5, 0.5).
           On time:seconds {
             Local prograde_pitch_angle to CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:srfprograde:forevector)).
             Set pid_pitch:setpoint to prograde_pitch_angle.

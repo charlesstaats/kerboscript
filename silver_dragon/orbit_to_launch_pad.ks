@@ -61,7 +61,7 @@ Local function unlock_steering_airbrakes {
   }
 }
 
-Local LOG_TRAJECTORY to true.
+Local LOG_TRAJECTORY to false.
 Local phase_angle to phaseAngle().
 On time:seconds {
   Set phase_angle to phaseAngle().
@@ -308,7 +308,7 @@ Local function distortion_vector {
   Local upvec to up:forevector:normalized.
   Local targetvec to target_position.
   Set targetvec to targetvec - vdot(targetvec, upvec) * upvec.
-  If targetvec:mag > 1500 { Set targetvec to V(0,0,0). }  // The "abort" case.
+  If targetvec:mag > 1000 { Set targetvec to V(0,0,0). }  // The "abort" case.
   Return 0.17 * targetvec + 20 * upvec.
 }
 

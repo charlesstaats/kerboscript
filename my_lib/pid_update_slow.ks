@@ -1,6 +1,6 @@
 @LAZYGLOBAL OFF.
 
-Runpath("0:/my_lib/clip").
+Runoncepath("0:/my_lib/clip").
 
 Global function slow_updater {
   Parameter pid.
@@ -21,7 +21,7 @@ Global function slow_updater {
     Local interval is current_time - prev_time.
     Local prev_dOdt is pid:output.
     Local dOdt is pid:update(current_time, input).
-    Local retv is clip((prev_dOdt + dOdt) * 0.5 * interval + prev_output, min_value, max_value).
+    Local retv is clip(update_rate * (prev_dOdt + dOdt) * 0.5 * interval + prev_output, min_value, max_value).
     Set prev_output to retv.
     Return retv.
   }.

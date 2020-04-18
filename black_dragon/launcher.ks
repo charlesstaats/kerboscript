@@ -19,7 +19,7 @@ Local function define_update_eta {
       Set adjusted_apoapsis to adjusted_apoapsis - ship:orbit:period.
     }
     Local dOdt is pid_eta:update(current_time, adjusted_apoapsis) - 0.2.
-    Local retv is clip(prev_dOdt * interval + prev_output, 0, 1).
+    Local retv is clip(0.2 * prev_dOdt * interval + prev_output, 0, 1).
     Set prev_output to retv.
     Set prev_dOdt to dOdt.
     Return retv.
@@ -46,7 +46,7 @@ function Launch {
   Local RAMP_UP_TIME to 3.
   Lock throttle to min(1.0, (time:seconds - START_TIME) / RAMP_UP_TIME).
 
-  Local pid_pressure is pidloop(100.0, 1.0, 100.0, 0, 1).
+  Local pid_pressure is pidloop(50.0, 2.0, 50.0, 0, 1).
   Set pid_pressure:setpoint to MAX_DYNAMIC_PRESSURE.
   When time:seconds > START_TIME + RAMP_UP_TIME then {
     Lock throttle to pid_pressure:update(time:seconds, ship:Q).
@@ -83,15 +83,15 @@ function Launch {
       If vang(ship:facing:forevector, ship:up:vector) < TURN_ANGLE {
         Return true.
       } else {
-        Local pi_pitch to pidloop(1.0, 0.1, 0.0).
-        Local dd_pitch to pidloop(0.2, 0, 0.2, -1.0, 1.0).
+        Local pi_pitch to pidloop(0.5, 0.1, 0.0).
+        Local dd_pitch to pidloop(0.4, 0, 0.2, -1.0, 1.0).
         On time:seconds {
           Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
           Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
           Local desired_changerate_pitch to pi_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
-          Set control:pitch to 1.0 * dd_pitch:update(time:seconds, pi_pitch:changerate - desired_changerate_pitch).
+          Set control:pitch to dd_pitch:update(time:seconds, pi_pitch:changerate - desired_changerate_pitch).
           //Set control:pitch to pid_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
-          If vang(ship:facing:forevector, ship:srfprograde:forevector) > 0.5 {
+          If vdot(ship:facing:upvector, ship:srfprograde:forevector) < 0 {
             Return true.
           }
           Print "now following prograde".
@@ -102,7 +102,7 @@ function Launch {
             Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
             Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
             Set control:pitch to 0.06 - pid_pitch:update(time:seconds, CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:facing:forevector))).  // Because the cockpit's "ceiling" is towards the ground, need to reverse the pitch control.
-            If ship:velocity:surface:mag < 1300 { Return true. }
+            If altitude < 50000 and ship:velocity:surface:mag < 1300 { Return true. }
 
             Set control:neutralize to true.
             SAS on.

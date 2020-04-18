@@ -5,7 +5,21 @@ Local DETACH_WHEN_FUEL_IS to 2200.
 RunOncePath("0:/my_lib/fake_rcs").
 RunOncePath("0:/my_lib/pump_fuel").
 
-Local is_port_booster to (vdot(core:part:position - ship:position, ship:facing:starvector) < 0).
+Local info to lex().
+
+If ship:name:contains("port") {
+  Set info["booting_midair"] to true.
+  Set info["is_port_booster"] to true.
+} else if ship:name:contains("starboard") {
+  Set info["booting_midair"] to true.
+  Set info["is_port_booster"] to false.
+} else {
+  Set info["booting_midair"] to false.
+  Set info["is_port_booster"] to (vdot(core:part:position - ship:position, ship:facing:starvector) < 0).
+}
+
+Local booting_midair to info:booting_midair.
+Local is_port_booster to info:is_port_booster.
 Print "is_port_booster: " + is_port_booster.
 
 Local side_fuel_resources to list().
@@ -27,16 +41,13 @@ Function side_fuel_remaining {
   Return total_fuel.
 }
 
-
-If is_port_booster {
+If is_port_booster and not booting_midair {
   Wait until side_fuel_remaining() <= 2 * DETACH_WHEN_FUEL_IS.  // Includes both side boosters.
 } else {
-  Wait until alt:radar > 1000.  // Ensure init_stage is not triggered when rocket lifts off.
-  Local init_stage to stage:number.
-  Wait until stage:number <> init_stage.
+  Wait until ship:name:contains("port") or ship:name:contains("starboard").
 }
 Local SEPARATION_TIME to time:seconds.
-If is_port_booster {
+If is_port_booster and not booting_midair {
   For engine in side_engines {
     Engine:shutdown().
   }
@@ -75,7 +86,7 @@ For engine in side_engines {
   Engine:activate().
 }
 
-Local transfer_order is all_fuel_to_first_tank().
+Local transfer_order is all_fuel_to_lowest_tank().
 Transfer_order:activate().
 
 Local function init_target_direction {
@@ -249,6 +260,8 @@ When throttle > 0.05 and alt:radar < 1000 then {
   }
 }
 
-Local should_end is false.
-On AG1 { Set should_end to true. }.
-Wait until should_end.
+Wait until ship:status = "LANDED" or ship:status = "SPLASHED".
+RCS off.
+Lock throttle to 0.
+Brakes off.
+Wait 1.

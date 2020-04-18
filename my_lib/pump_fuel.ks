@@ -1,6 +1,6 @@
 @LAZYGLOBAL OFF.
 
-Runpath("0:/KSLib/library/lib_enum").
+RunOncePath("0:/KSLib/library/lib_enum").
 
 Function parts_with_resources {
   Parameter resource_name_list.  // strings
@@ -40,10 +40,14 @@ Function tank_empty {
 Function all_fuel_to_tank {
   Parameter index.
   Parameter restrict_to_pattern is "".
-
+  Parameter use_sorting_key is false.
+  Parameter sorting_key_fn is {}.
 
   Local tanks is rocket_fuel_tanks().
   Set tanks to Enum:select(tanks, { Parameter part. Return part:name:matchespattern(restrict_to_pattern). }).
+  If use_sorting_key {
+    Set tanks to Enum:sort(tanks, { Parameter a, b. Return sorting_key_fn(a) - sorting_key_fn(b). }).
+  }
   If index < 0 { Set index to tanks:length + index. }
   Local recipient_tank is list(tanks[index]).
   Tanks:remove(index).
@@ -88,6 +92,16 @@ Function all_fuel_to_first_tank {
 
   Return all_fuel_to_tank(0, restrict_to_pattern).
 }
+
+Function all_fuel_to_lowest_tank {
+  Parameter restrict_to_pattern is "".
+
+  Return all_fuel_to_tank(0, restrict_to_pattern, true, {
+    Parameter tank.
+    Return vdot(tank:position - ship:position, ship:facing:forevector).
+  }).
+}
+
 //Local transfer_order is all_fuel_to_last_tank().
 //Transfer_order:activate().
 //Wait until transfer_order:done().

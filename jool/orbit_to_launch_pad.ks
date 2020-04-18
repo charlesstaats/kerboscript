@@ -293,17 +293,22 @@ When altitude < 70000 then {
     Lock_anti_target().
     When alt:radar < 1000 then {
       Local bounds to ship:bounds.
+      On round(time:seconds) {
+        Set bounds to ship:bounds.
+      }
       Local pid_thrust is pidloop(0.24, 0, 1.0, 0, 1).
-      Set pid_thrust:setpoint to 30.
+      Set pid_thrust:setpoint to 40.
       Lock throttle to pid_thrust:update(time:seconds, bounds:bottomaltradar).
       When (alt:radar < 175 and (target_position - vdot(target_position, ship:up:forevector) * ship:up:forevector):mag < 10)
            or (alt:radar < 75 and target_position:mag > 500)  // The "abort" case.
            then
       {
-        Set pid_thrust:setpoint to
-            choose -0.5
-            if abs(altitude - alt:radar) > 10 
-            else -7.0.  // water landing
+        If abs(altitude - alt:radar) > 10 {
+          Set pid_thrust:setpoint to -0.5.
+          Set pid_thrust:kp to 0.18.
+        } else {
+          Set pid_thrust:setpoint to -7.0.  // water landing
+        }
       }
     }
   }
@@ -312,8 +317,6 @@ When altitude < 70000 then {
 When ship:velocity:surface:mag < 4 then {
   Gear on.
 }
-
-Local bounds is ship:bounds.
 
 Local function distortion_vector {
   Local upvec to up:forevector:normalized.

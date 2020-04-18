@@ -268,6 +268,11 @@ When altitude < 70000 then {
   Brakes on.
   Set_airbrakes(0.75).
   Unlock_steering_airbrakes().
+  Set navmode to "surface".
+  On navmode {
+    Set navmode to "surface".
+    Return true.
+  }
   On time:seconds {
     If alt:radar < 20000 {
       Set_airbrakes(1.0).
@@ -280,6 +285,7 @@ When altitude < 70000 then {
 }
 
 When alt:radar < 20000 then {
+  KUniverse:TimeWarp:CancelWarp().
   Lock srf_retrograde to false.
   Lock_anti_target().
   //When ship:velocity:surface:mag < 300 then {  // NOTE: When https://github.com/KSP-KOS/KOS/issues/2666 is fixed, restore this.
@@ -288,14 +294,14 @@ When alt:radar < 20000 then {
   When alt:radar < 1000 then {
     Local bounds to ship:bounds.
     Local pid_thrust is pidloop(0.125, 0, 0.45, 0, 1).
-    Set pid_thrust:setpoint to 30.
+    Set pid_thrust:setpoint to 40.
     Lock throttle to pid_thrust:update(time:seconds, bounds:bottomaltradar).
     When (alt:radar < 175 and (target_position - vdot(target_position, ship:up:forevector) * ship:up:forevector):mag < 10)
          or (alt:radar < 115 and target_position:mag > 1000)  // The "abort" case.
          then
     {
       Set pid_thrust:setpoint to
-          choose -0.2
+          choose -0.5
           if abs(altitude - alt:radar) > 10 
           else -7.0.  // water landing
     }
@@ -330,6 +336,10 @@ When throttle > 0.05 then {
   }
 }
 
-Local should_end is false.
-On AG1 { Set should_end to true. }.
-Wait until should_end.
+Wait until ship:status = "LANDED" or ship:status = "SPLASHED".
+RCS off.
+Lock throttle to 0.
+Unlock throttle.
+Set control:pilotmainthrottle to 0.0.
+Brakes off.
+Wait 1.

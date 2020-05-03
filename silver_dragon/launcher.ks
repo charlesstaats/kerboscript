@@ -86,7 +86,7 @@ function Launch {
           Local desired_changerate_pitch to pi_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
           Set control:pitch to dd_pitch:update(time:seconds, pi_pitch:changerate - desired_changerate_pitch).
           //Set control:pitch to pid_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
-          If vang(ship:facing:forevector, ship:srfprograde:forevector) > 0.5 {
+          If vdot(ship:facing:upvector, ship:srfprograde:forevector) < 0 {
             Return true.
           }
           Print "now following prograde".

@@ -1,6 +1,6 @@
 Local finished is false.
 On AG2 {
-  Runpath("0:/black_dragon/launcher").
+  Runpath("0:/silver_dragon/launcher").
   Local params to core:tag:split(",").
   // Parameter MAX_TIME_TO_APOAPSIS is 20.
   // Parameter TURN_ANGLE is 20.

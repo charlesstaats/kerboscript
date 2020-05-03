@@ -39,6 +39,9 @@ function Launch {
   Parameter MAX_TIME_TO_APOAPSIS is 20.
   Parameter TURN_ANGLE is 20.
 
+  Local orig_control to ship:controlpart.
+  Core:part:parent:controlfrom().
+
   Local control is ship:control.
 
   Local MAX_DYNAMIC_PRESSURE is 0.17.
@@ -55,7 +58,7 @@ function Launch {
 
   Local pid_pitch is pidloop(3.2, 16.0, 0.0, -1, 1).
   Local pid_yaw is pidloop(3.2, 6.4, 0.0, -1, 1).
-  Local pid_roll is pidloop(0.6, 0.01, 1.2, -1.0, 1.0).
+  Local pid_roll is pidloop(0.8, 0.0, 1.2, -1.0, 1.0).
   Local initial_ascent to true.
 
   Stage.
@@ -150,6 +153,7 @@ function Launch {
               Set engine:thrustlimit to 100.
             }
           }
+          Orig_control:controlfrom().
           HUDText("Program finished; returning throttle control.", 5, 2, 15, green, false).
         }
       }

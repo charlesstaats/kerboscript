@@ -93,27 +93,27 @@ function Launch {
           Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
           Local desired_changerate_pitch to pi_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
           Set control:pitch to dd_pitch:update(time:seconds, pi_pitch:changerate - desired_changerate_pitch).
-          //Set control:pitch to pid_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
           If vdot(ship:facing:upvector, ship:srfprograde:forevector) < 0 {
             Return true.
           }
           Print "now following prograde".
           Set pid_pitch to pidloop(4.0, 1.2, 8.0, -0.5, 0.5).
+          Local PITCH_BIAS to 0.06.
+          Local surface_fraction_prograde to 1.0.
+          When ship:Q < 0.01 then {
+            Set PITCH_BIAS to 0.0.
+            Set pid_yaw:ki to 0.0.
+            Set pid_pitch:ki to 0.0.
+            Set surface_fraction_prograde to 0.0.
+          }
           On time:seconds {
-            Local prograde_pitch_angle to CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:srfprograde:forevector)).
+            Local prograde to surface_fraction_prograde * ship:velocity:surface:normalized + (1 - surface_fraction_prograde) * ship:velocity:orbit:normalized.
+            Local prograde_pitch_angle to CONSTANT:DegToRad * (90 - vang(ship:up:forevector, prograde)).
             Set pid_pitch:setpoint to prograde_pitch_angle.
             Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
             Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
-            Set control:pitch to 0.06 - pid_pitch:update(time:seconds, CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:facing:forevector))).  // Because the cockpit's "ceiling" is towards the ground, need to reverse the pitch control.
-            If altitude < 50000 and ship:velocity:surface:mag < 1300 { Return true. }
-
-            Set control:neutralize to true.
-            SAS on.
-            Local current_time is time:seconds.
-            When time:seconds > current_time + 0.5 then {
-              Set SASMode to "PROGRADE".
-            }
-            Return false.
+            Set control:pitch to PITCH_BIAS - pid_pitch:update(time:seconds, CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:facing:forevector))).  // Because the cockpit's "ceiling" is towards the ground, need to reverse the pitch control.
+            Return true.
           }
           Return false.
         }

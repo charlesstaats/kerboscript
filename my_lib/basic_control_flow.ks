@@ -78,5 +78,49 @@ Set control_flow["new"] to {
     Set active_op to false.
   }.
 
+  Set cf_object["register_sequence"] to {
+    Parameter id.
+    Parameter ops.
+    Parameter next_ops is [].
+
+
+    Local cf to control_flow:new().
+
+    {
+      Local iter to ops:iterator.
+      Until not iter:next() {
+        Local i to iter:index.
+        Local f to iter:value.
+        Cf:register_op(i, {
+          If f() { Return i. } else { Return i + 1. }.
+        }).
+      }
+    }
+    {
+      Local i to ops:length.
+      Local return_value to 0.
+      If next_ops:istype("KOSDelegate") {
+        Cf:register_op(i, {
+          Set return_value to next_ops().
+          Return [].
+        }).
+      } else {
+        Set return_value to next_ops.
+        Cf:register_op(i, { Return []. }).
+      }
+    }
+    Cf:enqueue_op(0).
+
+    Cf_object:register_op(id, {
+      Cf:run_pass().
+      If cf:active() {
+        Return id.
+      } else {
+        Return return_value.
+      }
+    }).
+  }.
+
   Return cf_object.
 }.
+

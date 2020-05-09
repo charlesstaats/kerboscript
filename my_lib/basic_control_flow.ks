@@ -19,12 +19,27 @@ Local function to_enumerable {
 
 Global control_flow to lex().
 
+Set control_flow["merge"] to {
+  Parameter sequence_id.
+  Local retv to lex().
+  Set retv["merging_sequence"] to sequence_id.
+  Return retv.
+}.
+
+Set control_flow["fork"] to {
+  Parameter op_id.
+  Local retv to lex().
+  Set retv["forking_op"] to op_id.
+  Return retv.
+}
+
 Set control_flow["new"] to {
   Local op_queue to queue().
   Local active_op to false.  // Used to hold the control flow active when the queue is empty.
   Local id_to_op to lex().
   Local cf_object to lex().
   Local END_PASS_OP to [].  // Since enumerables cannot be registered as op ids, an empty list makes a good sentinel value.
+  Local completed_sequences to UniqueSet().
 
   Set cf_object["register_op"] to {
     Parameter id.
@@ -91,9 +106,24 @@ Set control_flow["new"] to {
       Until not iter:next() {
         Local i to iter:index.
         Local f to iter:value.
-        Cf:register_op(i, {
-          If f() { Return i. } else { Return i + 1. }.
-        }).
+        If f:hassuffix("merging_sequence") {
+          Cf:register_op(i, {
+            If completed_sequences:contains(f:merging_sequence) {
+              Return i + 1.
+            } else {
+              Return i.
+            }
+          }).
+        } else if f:hassuffix("forking_op") {
+          Cf:register_op(i, {
+            Cf_object:enqueue_op(f:forking_op).
+            Return i + 1.
+          }).
+        } else {
+          Cf:register_op(i, {
+            If f() { Return i. } else { Return i + 1. }.
+          }).
+        }
       }
     }
     {
@@ -116,6 +146,7 @@ Set control_flow["new"] to {
       If cf:active() {
         Return id.
       } else {
+        Completed_sequences:add(id).
         Return return_value.
       }
     }).

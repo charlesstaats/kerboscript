@@ -12,7 +12,7 @@ Local function assert {
 Local function to_enumerable {
   Parameter param.
   If not param:istype("enumerable") {
-    Set param to [param].
+    Set param to list(param).
   }
   Return param.
 }
@@ -31,15 +31,20 @@ Set control_flow["fork"] to {
   Local retv to lex().
   Set retv["forking_op"] to op_id.
   Return retv.
-}
+}.
 
 Set control_flow["new"] to {
   Local op_queue to queue().
   Local active_op to false.  // Used to hold the control flow active when the queue is empty.
   Local id_to_op to lex().
   Local cf_object to lex().
-  Local END_PASS_OP to [].  // Since enumerables cannot be registered as op ids, an empty list makes a good sentinel value.
+  Local END_PASS_OP to list().  // Since enumerables cannot be registered as op ids, an empty list makes a good sentinel value.
   Local completed_sequences to UniqueSet().
+
+  Set cf_object["sequence_done"] to {
+    Parameter id.
+    Return completed_sequences:contains(id).
+  }.
 
   Set cf_object["register_op"] to {
     Parameter id.
@@ -71,18 +76,18 @@ Set control_flow["new"] to {
   Set cf_object["enqueue_op"] to {
     Parameter id.
     Assert(not id:istype("enumerable"), "Attempted to enqueue enumerable type " + id:typename + " as an id for a control flow op. This is not allowed.").
-    Op_queue.push(id).
+    Op_queue:push(id).
   }.
 
   Set cf_object["enqueue_ops"] to {
     Parameter ops.
     For op in ops {
-      Op_queue.push(op).
+      Op_queue:push(op).
     }.
   }.
 
   Set cf_object["run_pass"] to {
-    Op_queue.push(END_PASS_OP).
+    Op_queue:push(END_PASS_OP).
     From { Local current_id to activate_op(). }
         until current_id = END_PASS_OP
         step { Set current_id to activate_op(). }
@@ -96,7 +101,7 @@ Set control_flow["new"] to {
   Set cf_object["register_sequence"] to {
     Parameter id.
     Parameter ops.
-    Parameter next_ops is [].
+    Parameter next_ops is list().
 
 
     Local cf to control_flow:new().
@@ -126,17 +131,17 @@ Set control_flow["new"] to {
         }
       }
     }
+    Local return_value to 0.
     {
       Local i to ops:length.
-      Local return_value to 0.
       If next_ops:istype("KOSDelegate") {
         Cf:register_op(i, {
           Set return_value to next_ops().
-          Return [].
+          Return list().
         }).
       } else {
         Set return_value to next_ops.
-        Cf:register_op(i, { Return []. }).
+        Cf:register_op(i, { Return list(). }).
       }
     }
     Cf:enqueue_op(0).

@@ -135,6 +135,9 @@ function Launch {
 
     Local pitch_bias to 0.06.
     Local surface_fraction_prograde to 1.0.
+    Local pitch_adjustment to 0.0.  // adjusting pitch to raise or lower apoapsis
+    Local pid_apoapsis to pidloop(0.0003).
+    Set pid_apoapsis:setpoint to 70300.
 
     Cf:register_sequence("steering", list(
       {
@@ -177,7 +180,7 @@ function Launch {
         Local prograde to surface_fraction_prograde * ship:velocity:surface:normalized +
                           (1 - surface_fraction_prograde) * ship:velocity:orbit:normalized.
         Local prograde_pitch_angle to CONSTANT:DegToRad * (90 - vang(ship:up:forevector, prograde)).
-        Set pid_pitch:setpoint to prograde_pitch_angle.
+        Set pid_pitch:setpoint to prograde_pitch_angle + pitch_adjustment.
         Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
         Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
         // Because the cockpit's "ceiling" is towards the ground, need to reverse the pitch control.
@@ -195,6 +198,11 @@ function Launch {
         Set pid_pitch:ki to 0.0.
         Set surface_fraction_prograde to 0.0.
         Return false.
+      }, {
+        Return eta:apoapsis > MAX_TIME_TO_APOAPSIS.
+      }, {
+        Set pitch_adjustment to pid_apoapsis:update(time:seconds, alt:apoapsis).
+        Return not cf:sequence_done("throttle").
       }
     )).
 

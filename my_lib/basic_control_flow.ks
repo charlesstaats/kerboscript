@@ -28,12 +28,18 @@ Set control_flow["merge"] to {
 
 Set control_flow["fork"] to {
   Parameter op_id.
+  Parameter sequence_ops to list().
   Local retv to lex().
   Set retv["forking_op"] to op_id.
+  If sequence_ops:length > 0 {
+    Set retv["forking_seq"] to sequence_ops.
+  }.
   Return retv.
 }.
 
 Set control_flow["new"] to {
+  Parameter has_background_cf is true.
+
   Local op_queue to queue().
   Local active_op to false.  // Used to hold the control flow active when the queue is empty.
   Local id_to_op to lex().
@@ -86,7 +92,14 @@ Set control_flow["new"] to {
     }.
   }.
 
+  If has_background_cf {
+    Set cf_object["background"] to control_flow:new(false).  // Don't create background:background to avoid infinite recursion.
+  }.
+
   Set cf_object["run_pass"] to {
+    If has_background_cf {
+      Cf_object:background:run_pass().
+    }.
     Op_queue:push(END_PASS_OP).
     From { Local current_id to activate_op(). }
         until current_id = END_PASS_OP
@@ -120,6 +133,9 @@ Set control_flow["new"] to {
             }
           }).
         } else if f:hassuffix("forking_op") {
+          If f:hassuffix("forking_seq") {
+            Cf_object:register_sequence(f:forking_op, f:forking_seq).
+          }.
           Cf:register_op(i, {
             Cf_object:enqueue_op(f:forking_op).
             Return i + 1.

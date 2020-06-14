@@ -37,6 +37,13 @@ Set lib_smoothing["exponential_moving_avg"] to {
     Return avg.
   }.
 
+  Set retv["reset"] to {
+    Parameter new_avg.
+    Set avg to new_avg.
+    Set prev_time to -1.
+    Set prev_value to new_avg.
+  }.
+
   Return retv.
 
 }.
@@ -75,6 +82,12 @@ Set lib_smoothing["rate_limited"] to {
 
   Set retv["get"] to {
     Return position.
+  }.
+
+  Set retv["reset"] to {
+    Parameter starting_position.
+    Set position to starting_position.
+    Set prev_time to -1.
   }.
 
   Return retv.

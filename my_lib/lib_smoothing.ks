@@ -39,10 +39,14 @@ Set lib_smoothing["exponential_moving_avg"] to {
 
   Set retv["reset"] to {
     Parameter new_avg.
+    Parameter new_persistence to PERSISTENCE.
     Set avg to new_avg.
+    Set PERSISTENCE to new_persistence.
     Set prev_time to -1.
     Set prev_value to new_avg.
   }.
+
+  Set retv["prev_time"] to { Return prev_time. }.
 
   Return retv.
 
@@ -90,5 +94,19 @@ Set lib_smoothing["rate_limited"] to {
     Set prev_time to -1.
   }.
 
+  Return retv.
+}.
+
+Set lib_smoothing["compose"] to {
+  Parameter outer, inner.
+
+  Local retv to lex().
+  Set retv["update"] to {
+    Parameter time_secs.
+    Parameter val.
+
+    Local mid to inner:update(time_secs, val).
+    Return outer:update(time_secs, mid).
+  }.
   Return retv.
 }.

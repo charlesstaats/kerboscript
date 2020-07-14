@@ -2,6 +2,7 @@
 
 Runoncepath("0:/my_lib/basic_control_flow").
 Runoncepath("0:/my_lib/clip").
+RunOncePath("0:/my_lib/controller").
 Runoncepath("0:/my_lib/pump_fuel").
 
 Local function define_update_eta {
@@ -47,6 +48,7 @@ function Launch {
 
   Local MAX_DYNAMIC_PRESSURE is 0.17.
   Local RAMP_UP_TIME to 3.
+  Local GOAL_ALTITUDE to 73000.
   
   Local cf to control_flow:new().
 
@@ -77,10 +79,10 @@ function Launch {
         Return false.
       }, {
         Set control:pilotmainthrottle to pid_pressure:update(time:seconds, ship:Q).
-        Return alt:apoapsis < 68000.
+        Return alt:apoapsis < GOAL_ALTITUDE - 2000.
       }, {
         Set control:pilotmainthrottle to 0.02.
-        Return alt:apoapsis < 70000 and eta:apoapsis > MAX_TIME_TO_APOAPSIS.
+        Return alt:apoapsis < GOAL_ALTITUDE and eta:apoapsis > MAX_TIME_TO_APOAPSIS.
       }, {
         Set control:pilotmainthrottle to 0.
         Return false.
@@ -91,12 +93,12 @@ function Launch {
       {
         If min(eta:apoapsis, ship:orbit:period - eta:apoapsis) <= MAX_TIME_TO_APOAPSIS
             or alt:apoapsis - alt:periapsis < 300
-            or alt:apoapsis < 70300 {
+            or alt:apoapsis < GOAL_ALTITUDE {
           Set control:pilotmainthrottle to update_eta().
         } else {
           Set control:pilotmainthrottle to 0.
         }
-        Return alt:periapsis < 70300.
+        Return alt:periapsis < GOAL_ALTITUDE.
       }, {
         Set control:pilotmainthrottle to 0.
         Return false.
@@ -136,8 +138,8 @@ function Launch {
     Local pitch_bias to 0.06.
     Local surface_fraction_prograde to 1.0.
     Local pitch_adjustment to 0.0.  // adjusting pitch to raise or lower apoapsis
-    Local pid_apoapsis to pidloop(0.0003).
-    Set pid_apoapsis:setpoint to 70300.
+    Local pid_apoapsis to pf_controller(0.0003, 20).
+    Set pid_apoapsis:setpoint to GOAL_ALTITUDE.
 
     Cf:register_sequence("steering", list(
       {
@@ -193,11 +195,17 @@ function Launch {
     Cf:register_sequence("surface_to_orbital_prograde", list(
       { Return ship:Q >= 0.01. },
       {
+        // Ensure change is gradual.
+        Set pitch_bias to 0.99 * pitch_bias.
+        Set pid_yaw:ki to 0.99 * pid_yaw:ki.
+        Set pid_pitch:ki to 0.99 * pid_pitch:ki.
+        Set surface_fraction_prograde to clip(ship:Q / 0.01, 0, 1).
+        Return ship:Q > 0.0001.
+      }, {
         Set pitch_bias to 0.0.
         Set pid_yaw:ki to 0.0.
         Set pid_pitch:ki to 0.0.
         Set surface_fraction_prograde to 0.0.
-        Return false.
       }, {
         Return eta:apoapsis > MAX_TIME_TO_APOAPSIS.
       }, {
@@ -212,7 +220,11 @@ function Launch {
     Cf:run_pass().
     Wait 0.
   }
-  Orig_control:controlfrom().
   Control:neutralize on.
+  Orig_control:controlfrom().
+  Wait 0.
+  Toggle AG6.  // Deploy solar panels.
+  For _ in range(4) { Toggle AG1. Wait 0.2. }.  // Separate head from booster.
+
   HUDText("Program finished; returning control.", 5, 2, 15, green, true).
 }

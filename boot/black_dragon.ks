@@ -6,8 +6,15 @@ On AG2 {
   // Parameter TURN_ANGLE is 20.
   Launch(params[0]:tonumber(), params[1]:tonumber()).
 }
+Local landing to false.
+On AG7 {
+  Set landing to true.
+}
 On AG3 {
   Set finished to true.
 }
 Print "Press 2 to launch, 3 to cancel launch script.".
-Wait until finished.
+Wait until finished or landing.
+If landing {
+  Runpath("0:/black_dragon/orbit_to_launch_pad").
+}.

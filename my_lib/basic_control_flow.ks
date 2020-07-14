@@ -29,12 +29,51 @@ Set control_flow["merge"] to {
 Set control_flow["fork"] to {
   Parameter op_id.
   Parameter sequence_ops to list().
+  Set sequence_ops to to_enumerable(sequence_ops).
   Local retv to lex().
   Set retv["forking_op"] to op_id.
   If sequence_ops:length > 0 {
     Set retv["forking_seq"] to sequence_ops.
   }.
   Return retv.
+}.
+
+Set control_flow["waitForSecs"] to {
+  Parameter waiting_time.
+  Parameter op_id is list().
+  Local repeat to true.
+  Local exit to false.
+  If not op_id:hasSuffix("length") or op_id:length > 0 {
+    Set repeat to op_id.
+    Set exit to list().
+  }.
+  Local ending_time to -1.
+  Return {
+    If ending_time < 0 {
+      Set ending_time to time:seconds + waiting_time.
+      Return repeat.
+    }.
+    If time:seconds >= ending_time {
+      Return exit.
+    }
+    Return repeat.
+  }.
+}.
+
+Set control_flow["waituntil_then"] to {
+  Parameter until_clause, do_clause.
+  Parameter name is list().
+  Local repeat to true.
+  Local exit to false.
+  If not name:hasSuffix("length") or name:length > 0 {
+    Set repeat to name.
+    Set exit to list().
+  }.
+  Return {
+    If not until_clause() { Return repeat. }.
+    Do_clause().
+    Return exit.
+  }.
 }.
 
 Set control_flow["new"] to {
@@ -83,6 +122,28 @@ Set control_flow["new"] to {
     Parameter id.
     Assert(not id:istype("enumerable"), "Attempted to enqueue enumerable type " + id:typename + " as an id for a control flow op. This is not allowed.").
     Op_queue:push(id).
+  }.
+
+  Set cf_object["register_and_enqueue_op"] to {
+    Parameter id.
+    Parameter execute.
+    Cf_object:register_op(id, execute).
+    Cf_object:enqueue_op(id).
+  }.
+    
+  Set cf_object["register_and_enqueue_seq"] to {
+    Parameter id.
+    Parameter ops.
+    Cf_object:register_sequence(id, ops).
+    Cf_object:enqueue_op(id).
+  }.
+
+  Set cf_object["print_queue"] to {
+    Print op_queue.
+    If has_background_cf {
+      Print "background:".
+      Cf_object:background:print_queue().
+    }.
   }.
 
   Set cf_object["enqueue_ops"] to {
@@ -134,7 +195,17 @@ Set control_flow["new"] to {
           }).
         } else if f:hassuffix("forking_op") {
           If f:hassuffix("forking_seq") {
-            Cf_object:register_sequence(f:forking_op, f:forking_seq).
+            If f:forking_seq:length = 1 {
+              Cf_object:register_op(f:forking_op, {
+                If f:forking_seq[0]() {
+                  Return f:forking_op.
+                } else {
+                  Return list().
+                }.
+              }).
+            } else {
+              Cf_object:register_sequence(f:forking_op, f:forking_seq).
+            }.
           }.
           Cf:register_op(i, {
             Cf_object:enqueue_op(f:forking_op).

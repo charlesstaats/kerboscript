@@ -21,9 +21,9 @@ Local function matrix_surrounding_geoposition {
   Local matrix to list().
   Local geocoords_pos to geocoords:position.
 
-  From {Local delta_n to -100.} until delta_n > 100 step {Set delta_n to delta_n + 10.} do {
+  From {Local delta_n to -400.} until delta_n > 400 step {Set delta_n to delta_n + 16.} do {
     Local current_row to list().
-    From {local delta_e to -100.} until delta_e > 100 step {set delta_e to delta_e + 10.} do {
+    From {local delta_e to -400.} until delta_e > 400 step {set delta_e to delta_e + 16.} do {
       Current_row:add(kerbin:geopositionOf(geocoords_pos + delta_n * local_north + delta_e * local_east)).
     }.
     Matrix:add(current_row).

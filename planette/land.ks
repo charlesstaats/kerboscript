@@ -15,6 +15,12 @@ Local function target_position {
   Return desired_geolocation:position.
 }.
 
+Local stop_waiting to false.
+On AG2 {
+  Stop_waiting on.
+}.
+Wait until stop_waiting.
+
 Local function distortion_vector {
   Local upvec to ship:up:vector.
   Local targetvec to vxcl(upvec, target_position()).
@@ -26,7 +32,7 @@ Local function distortion_vector {
 SAS off.
 
 Local control to ship:control.
-Local pid_roll to pidloop(1, 0, 0.5).
+Local pid_roll to pidloop(1, 0, 4).
 Local pid_pitch to pidloop(1, 0, 6).
 Local pid_yaw to pidloop(1, 0, 6).
 Local pid_throttle to pidloop(1, 0, 10).
@@ -34,7 +40,7 @@ Local pid_throttle to pidloop(1, 0, 10).
 Local throttle_var to 0.1.
 Lock throttle to throttle_var.
 
-When ship:altitude < 5000 and throttle_var < 0.3 then {
+When ship:altitude < 5000 and throttle_var < 1/3 then {
   Toggle AG1.  // Switch to dry mode.
 }.
 When ship:altitude < 4000 and ship:airspeed < 70 then {
@@ -96,13 +102,16 @@ Until ship:status <> "FLYING" {
     Set target_direction to angleaxis(angle_to_vertical - max_allowed_angle, axis) * target_direction.
   }.
   Local current_twr to twr().
-  Set control:roll to 4.0 / current_twr * pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
+  Set control:roll to 4.0 / current_twr * pid_roll:update(
+    time:seconds,
+    //-vdot(ship:angularvel, ship:facing:forevector)). 
+    ship:facing:upvector * ship:srfprograde:vector).
   Set control:pitch to 8.0 / current_twr * pid_pitch:update(time:seconds,
     -vdot(target_direction, ship:facing:topvector)).
   Set control:yaw to 8.0 / current_twr * pid_yaw:update(time:seconds,
     -vdot(target_direction, ship:facing:starvector)).
 
-  Set pid_throttle:setpoint to -max(0.5, min(sqrt(height), 0.025 * height)).
+  Set pid_throttle:setpoint to -max(0.5, min(100, min(sqrt(height), 0.025 * height))).
   Update_throttle_toward(min(1, max(0.1, 0.5 * pid_throttle:update(time:seconds, verticalspeed)
                                          + 1 / current_twr))).  
   If bounds:bottomaltradar < 250 and not gear { Gear on. }.

@@ -3,6 +3,7 @@ RunOncePath("0:/my_lib/lib_smoothing").
 RunOncePath("0:/my_lib/clip").
 
 Parameter USE_GEAR to true.
+Parameter MAX_LANDING_ANGLE to 45.
 
 Function available_thrust_facing {
   Local facing_dir to ship:facing:vector.
@@ -80,16 +81,17 @@ On time:seconds {
   Return true.
 }
 
-Wait until bounds:bottomaltradar < 200.
+Wait until bounds:bottomaltradar < 400.
 If USE_GEAR { Gear on. }.
+Throttle_smoother:reset(throttle_smoother:get(), 0.25).
 Wait until bounds:bottomaltradar < 50.// and vxcl(ship:up:vector, ship:velocity:surface):mag < 5.
 SAS off.
 RCS on.
 Function steering_direction {
   Local simple to 5 * ship:up:vector - ship:velocity:surface.
-  If vang(simple, ship:up:vector) > 45 {
+  If vang(simple, ship:up:vector) > MAX_LANDING_ANGLE {
     Local axis to vcrs(ship:up:vector, simple).
-    Return angleaxis(45, axis) * ship:up:vector.
+    Return angleaxis(MAX_LANDING_ANGLE, axis) * ship:up:vector.
   }.
   Return simple.
 }.

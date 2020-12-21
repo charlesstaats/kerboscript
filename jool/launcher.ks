@@ -1,6 +1,7 @@
 @LAZYGLOBAL OFF.
 
-Runpath("0:/my_lib/clip").
+RunOncePath("0:/my_lib/clip").
+RunOncePath("0:/my_lib/controller.ks").
 
 Local function define_update_eta {
   Local pid_eta is pidloop(0, 0, 1.0).
@@ -52,16 +53,26 @@ function Launch {
 
   Local pid_pitch is pidloop(3.2, 16.0, 0.0, -1, 1).
   Local pid_yaw is pidloop(3.2, 6.4, 0.0, -1, 1).
-  Local pid_roll is pidloop(0.9, 0.01, 19.2, -1.0, 1.0).
+  Local pid_roll is pidloop(0.9, 0, 19.2, -1.0, 1.0).
+  Local rotation_kp to 10.0.
+  Local rotation_kd to rotation_kp * 4.0.
   Local initial_ascent to true.
 
   Stage.
 
   On time:seconds {
     If SAS or not initial_ascent { Return false. }
-    Set control:pitch to pid_pitch:update(time:seconds, -vdot(ship:angularvel, ship:facing:starvector)). 
-    Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:angularvel, ship:facing:upvector)). 
-    Set control:roll to pid_roll:update(time:seconds, vdot(ship:facing:upvector, ship:north:forevector)).
+    Local target_direction to ship:up:vector.
+    Local desired_ang_vel to vcrs(ship:velocity:orbit, body:position) / body:position:sqrmagnitude.
+    Local desired_up to -ship:north:vector.
+    Local init_rotation to
+        direction_rotation_controller(
+            target_direction,
+            desired_up,
+            desired_ang_vel,
+            rotation_kp,
+            rotation_kd).
+    Set control:rotation to init_rotation.
     Return true.
   }
 
@@ -69,39 +80,56 @@ function Launch {
     Gear off.
 
     When verticalspeed > 100 then {
-    Set initial_ascent to false.
-    Set control:pitch to 0.05.
+      Set initial_ascent to false.
+      Set control:pitch to 0.05.
       Local pid_roll is pidloop(10.0, 20.0, 10.0, -1, 1).
       Local pid_yaw is pidloop(5.0, 0.1, 10.0, -1, 1).
       Local pid_pitch is pidloop(2.5, 1.5, 10.0, -1, 1).
       Set pid_pitch:setpoint to 6 * CONSTANT:DegToRad. 
       On time:seconds {
-        Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
-        Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
-        Set control:pitch to pid_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
+        Local target_direction to heading(90, 90-TURN_ANGLE):vector.
+        Local desired_ang_vel to vcrs(ship:velocity:orbit, body:position) / body:position:sqrmagnitude.
+        Local desired_up to V(0,0,0).
+        Local init_rotation to
+            direction_rotation_controller(
+                target_direction,
+                desired_up,
+                desired_ang_vel,
+                rotation_kp,
+                rotation_kd).
+        Set control:rotation to init_rotation.
         If vang(ship:facing:forevector, ship:up:vector) < TURN_ANGLE {
           Return true.
         } else {
           Print "now maintaining angle".
-          Local pi_pitch to pidloop(0.5, 0.1, 0.0).  // NOT APPLICABLE: Negative pk to counteract aerodynamic stability.
-          Local dd_pitch to pidloop(0.4, 0, 0.2, -1.0, 1.0).
           On time:seconds {
-            Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
-            Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
-            Local desired_changerate_pitch to pi_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
-            Set control:pitch to 4.0 * dd_pitch:update(time:seconds, pi_pitch:changerate - desired_changerate_pitch).
-            //Set control:pitch to pid_pitch:update(time:seconds, -vdot(vcrs(ship:srfprograde:forevector, ship:facing:forevector), ship:facing:starvector)).
-            If vang(ship:facing:forevector, ship:srfprograde:forevector) > 0.5 {
+            Local target_direction to heading(90, 90-TURN_ANGLE):vector.
+            Local desired_ang_vel to vcrs(ship:velocity:orbit, body:position) / body:position:sqrmagnitude.
+            Local desired_up to V(0,0,0).
+            Local init_rotation to
+                direction_rotation_controller(
+                    target_direction,
+                    desired_up,
+                    desired_ang_vel,
+                    rotation_kp,
+                    rotation_kd).
+            Set control:rotation to init_rotation.
+            If vang(ship:up:vector, ship:srfprograde:vector) < TURN_ANGLE {
               Return true.
             }
             Print "now following prograde".
-            Set pid_pitch to pidloop(4.0, 1.2, 8.0, -0.5, 0.5).
             On time:seconds {
-              Local prograde_pitch_angle to CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:srfprograde:forevector)).
-              Set pid_pitch:setpoint to prograde_pitch_angle.
-              Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
-              Set control:yaw to pid_yaw:update(time:seconds, vdot(ship:facing:forevector, ship:north:forevector)).
-              Set control:pitch to 0.06 - pid_pitch:update(time:seconds, CONSTANT:DegToRad * (90 - vang(ship:up:forevector, ship:facing:forevector))).  // Because the cockpit's "ceiling" is towards the ground, need to reverse the pitch control.
+              Local target_direction to vxcl(ship:north:vector, ship:velocity:surface):normalized.
+              Local desired_ang_vel to vcrs(ship:velocity:orbit, body:position) / body:position:sqrmagnitude.
+              Local desired_up to V(0,0,0).
+              Local init_rotation to
+                  direction_rotation_controller(
+                      target_direction,
+                      desired_up,
+                      desired_ang_vel,
+                      rotation_kp,
+                      rotation_kd).
+              Set control:rotation to init_rotation.
               If altitude < 50000 and ship:velocity:surface:mag < 1300 { Return true. }
 
               Set control:neutralize to true.

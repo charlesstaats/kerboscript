@@ -68,16 +68,19 @@ Global function direction_rotation_controller {
   }.
   Local delta_direction_torque to delta_direction_mag * vcrs(current_direction, delta_direction):normalized.
 
-  Set desired_up to vxcl(desired_direction, desired_up):normalized.
-  Local current_up to ship_facing:upvector.
-  Local delta_up to desired_up - current_up.  
-  Local delta_up_mag to constant:degToRad * vang(desired_up, current_up).
-  Until vang(delta_up, current_up) < 15 {
-    // We should divide by two to take the midpoint, but since we are normalizing anyway it
-    // does not matter.
-    Set delta_up to (delta_up + current_up):normalized.
+  Local delta_up_torque to V(0,0,0).
+  If desired_up:mag > 1e-6 {
+    Set desired_up to vxcl(desired_direction, desired_up):normalized.
+    Local current_up to ship_facing:upvector.
+    Local delta_up to desired_up - current_up.  
+    Local delta_up_mag to constant:degToRad * vang(desired_up, current_up).
+    Until vang(delta_up, current_up) < 15 {
+      // We should divide by two to take the midpoint, but since we are normalizing anyway it
+      // does not matter.
+      Set delta_up to (delta_up + current_up):normalized.
+    }.
+    Set delta_up_torque to delta_up_mag * vcrs(current_up, delta_up):normalized.
   }.
-  Local delta_up_torque to delta_up_mag * vcrs(current_up, delta_up):normalized.
 
   Local desired_angular_accel to kp * (delta_direction_torque + delta_up_torque) +
                                  kd * delta_omega.

@@ -376,7 +376,7 @@ Local function high_altitude_steering_seq {
 //          Print "starting aerodynamic control".
 //          RCS off.
           Set rotation_kp to 5.0.
-          Set rotation_kd to 25.0.
+          Set rotation_kd to 10.0.
         }
       ),
       control_flow:waituntil_then(

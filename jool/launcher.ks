@@ -146,9 +146,9 @@ function Launch {
         }
       }
 
-        When alt:apoapsis >= 68000 then {
-          AG1 on.  // Shut down less efficient engines.
-          Lock throttle to 0.04.  // Help maintain attitude.
+      When alt:apoapsis >= 68000 then {
+        AG1 on.  // Shut down less efficient engines.
+        Lock throttle to 0.04.  // Help maintain attitude.
 
         When eta:apoapsis <= MAX_TIME_TO_APOAPSIS + 5 then {
           Stage.  // payload faring

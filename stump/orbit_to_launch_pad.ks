@@ -1,6 +1,6 @@
 @LAZYGLOBAL OFF.
 
-Parameter profile is "0:/midget/descent_profile.csv".
+Parameter profile is "0:/stump/descent_profile.csv".
 Runpath("0:/KSlib/library/lib_enum").
 Runpath("0:/KSlib/library/lib_navigation").
 Runpath("0:/my_lib/bisect").
@@ -38,15 +38,15 @@ Local function set_airbrakes {
   For airbrake in airbrakes {
     Local steering_relevance is vdot(airbrake:rotation:forevector,
         control:yaw*ship:facing:starvector + control:pitch*ship:facing:upvector).
-    Local power is clip(brake_power - steering_power * steering_relevance, 0, 1).
-    Airbrake:getmodule("ModuleAeroSurface"):setfield("authority limiter", power * 100).
+    Local power is clip(brake_power - steering_power * steering_relevance, 0, 1 / 0.7).
+    Airbrake:getmodule("ModuleAeroSurface"):setfield("deploy angle", 0.7 * power * 100).
   }
 }
 
 Local LOG_TRAJECTORY to false.
 Local currently_logging to false.
 If LOG_TRAJECTORY {
-  Local log_file is "0:/midget/descent_log.csv".
+  Local log_file is "0:/stump/descent_log.csv".
   Log "time,altitude,phase_angle,airspeed,ergy" to log_file.
   Local next_log_time is time:seconds.
   When time:seconds >= next_log_time then {
@@ -146,15 +146,17 @@ When angle_to_std_range(phase_angle, pivot) < 359 then {
 }
 
 SAS on.
-Wait 0.5.
+Wait 0.9.
 Set SASMODE to "RETROGRADE".
-Wait 20.
+Wait 1.
+HUDText("SASMODE is " + SASMODE, 50 / kuniverse:timewarp:rate, 1, 15, green, false).
+Wait 19.
 Lock throttle to 0.05.
 Wait until alt:periapsis <= 67000.
 Unlock throttle.
 SAS off.
 
-Local steering_power to 0.0.
+Local steering_power to 0.3.
 Local pid_ergy is pidloop(0.1, 0.05, 0.0, -0.25, 0.25).
 Local pid_alt is pidloop(0.004, 0, 1.28).
 

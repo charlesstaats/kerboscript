@@ -432,7 +432,8 @@ Set impact_vec:width to 5.0.
 
 Local impact_error_control to vector_control_loop().
 Local adjustment_integral to vector_integral(0.05).
-Local function distortion_vector {
+
+Local function update_impact_error {
   Local facing_direction to ship:facing.
   Local height to ship:altitude - launchpad_altitude - bounds:furthestCorner(-facing_direction:vector):mag.
   Local upvec to ship:up:vector.
@@ -448,15 +449,19 @@ Local function distortion_vector {
   // Aim a bit farther out to end up descending vertically.
   Set impact_error to impact_error + (max(0, height - 2000) / 25) * vxcl(upvec, target_position):normalized.
   Set impact_error to impact_error / (height + 10).
-  Local adjustment to vxcl(facing_direction:vector, -impact_error).
+  Return impact_error.
+}.
+
+Local function distortion_vector {
+  Local impact_error to update_impact_error().
+  Local adjustment to vxcl(ship:facing:vector, -impact_error).
   Set adjustment to adjustment + adjustment_integral(time:seconds, adjustment).
   If should_abort() or NAIVE { Set adjustment to V(0,0,0). }.
-  Local up_component to 1.0 * upvec.
   // <DEBUG>
   Set adjustment_vec:vec to 200 * adjustment.
   Adjustment_vec:show on.
   // </DEBUG>
-  Return adjustment.// + up_component.
+  Return adjustment.
 }.
 
 Local function low_altitude_steering_seq {
@@ -525,37 +530,33 @@ Local function low_altitude_steering_seq {
     }, 
     //control_flow:fork("disable_ctrl_surfaces", disable_control_surfaces_seq()), 
     {
-//      Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
-      Set target_direction to (-ship:velocity:surface:normalized -
-          (1 / (control:pilotmainthrottle + 1e-3)) * distortion_vector() + 0.1 * ship:up:vector):normalized.
-      If ship:airspeed < 10 {
-        Set target_direction to (target_direction + 2 * ship:up:vector):normalized.
-      }.
+      Local upvec to ship:up:vector.
+      local horiz_velocity to vxcl(upvec, ship:velocity:surface).
+      local desired_horiz_velocity to V(0, 0, 0).
+      if bounds:bottomaltradar > 30 {
+        set desired_horiz_velocity to vxcl(upvec, 0.1 * target_position).
+      }
+      local look_at_horiz to 2 * update_impact_error().
+      local look_at to upvec + look_at_horiz.
 
-      If ship:airspeed > 200 {
-        // Don't get too far away from retrograde, to maintain aerodynamic stability.
-        Local retro to ship:srfretrograde:forevector.
-        If (retro - target_direction):mag > MAX_DIST_FROM_RETROGRADE {
-          Set target_direction to (target_direction - vdot(target_direction, retro) * retro):normalized.
-          Set target_direction to (retro + MAX_DIST_FROM_RETROGRADE * target_direction):normalized.
-        }.
-      } else {
-        // Keep the angle close enough to vertical that we won't lose control.
-        Local angle_to_vertical to vang(ship:up:vector, target_direction).
-        Local max_allowed_angle to max_angle_to_vertical(ship:altitude).
-        If angle_to_vertical > max_allowed_angle {
-          Local axis to vcrs(target_direction, ship:up:vector):normalized.
-          Set target_direction to angleaxis(angle_to_vertical - max_allowed_angle, axis) * target_direction.
-        }.
+      // Keep the angle close enough to vertical that we won't lose control.
+      Local angle_to_vertical to vang(upvec, look_at).
+      Local max_allowed_angle to max_angle_to_vertical(ship:altitude).
+      If angle_to_vertical > max_allowed_angle {
+        Set look_at to upvec + tan(max_allowed_angle) * look_at_horiz:normalized.
       }.
 
 //      Set control:pitch to pid_pitch:update(time:seconds,
-//        -vdot(target_direction, ship:facing:topvector)).
+//        -vdot(look_at, ship:facing:topvector)).
 //      Set control:yaw to pid_yaw:update(time:seconds,
-//        -vdot(target_direction, ship:facing:starvector)).
+//        -vdot(look_at, ship:facing:starvector)).
       Local factor to 3.//0.3 / (control:pilotmainthrottle + 0.1).
+      If round(10 * time:seconds) = 10 * round(time:seconds) {
+        Print "angle to vertical: " + vang(upvec, ship:facing:vector).
+        Print "max allowed angle: " + max_allowed_angle.
+      }.
       Set control:rotation to factor * direction_rotation_controller(
-          target_direction,
+          look_at,
           zero_vec,
           reference_frame_angular_velocity(),
           rotation_kp,

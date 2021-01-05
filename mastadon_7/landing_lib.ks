@@ -28,7 +28,7 @@ Global function vector_control_loop {
   }.
 }.
 
-Local SEA_LEVEL_MAX_ANGLE to 5.
+Local SEA_LEVEL_MAX_ANGLE to 10.
 Function max_angle_to_vertical {
   Parameter ship_altitude.
   If ship_altitude >= 5000 { Return 90. }.

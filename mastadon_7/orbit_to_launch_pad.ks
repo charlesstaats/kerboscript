@@ -17,12 +17,14 @@ RunOncePath("0:/pump_fuel").
 
 Local LOG_TRAJECTORY to NAIVE.
 Local vars to lex().
+Local zero_vec to V(0,0,0).
 Local cf to control_flow:new().
 Local background to cf:background.
 
 Set target to "North Launchpad".
 Local target_geo to location_constants:launchpad.
 Lock target_position to target_geo:position.
+Local launchpad_altitude to target_geo:terrainheight.
 
 FakeRCS:find_engines().
 Background:register_and_enqueue_op("fakercs",
@@ -37,7 +39,7 @@ Local bounds_computation_time to time:seconds.  // But let's recompute it period
 Background:register_and_enqueue_op("recompute_bounds",
   {
     Local time_secs to time:seconds.
-    If time_secs - bounds_computation_time >= 10 {
+    If time_secs - bounds_computation_time >= 60 {
       Set bounds to ship:bounds.
       Set bounds_computation_time to time_secs.
       If NAIVE {
@@ -246,7 +248,6 @@ Local function starting_in_orbit_seq {
 }.
 
 Local function deorbit_seq {
-  Local zero_vec to V(0,0,0).
   Return list(
     {
       Set vars["rcs_retrograde"] to true.
@@ -255,7 +256,7 @@ Local function deorbit_seq {
     Control_flow:fork("lock_retrograde", list(
       {
         If not vars:hasKey("rcs_retrograde") { Return false. }.
-        Set control:rotation to direction_rotation_controller(-ship:prograde:vector, zero_vec, 10.0, 50.0).
+        Set control:rotation to direction_rotation_controller(-ship:prograde:vector, zero_vec, zero_vec, 10.0, 50.0).
         Return true.
       }
     )),
@@ -393,6 +394,7 @@ Local function high_altitude_steering_seq {
       Set control:rotation to
           direction_rotation_controller(
               target_direction,
+              zero_vec,
               desired_ang_vel,
               rotation_kp,
               rotation_kd).
@@ -413,29 +415,52 @@ Local function fuel_remaining {
 
 Local function should_abort {
   Return (alt:radar < 200 and vxcl(ship:up:vector, target_position):mag > 1000)
-         or fuel_remaining() <= 1000.
+         or fuel_remaining() <= 500.
 }.
 
 Local function over_water {
   Return abs(ship:altitude - alt:radar) <= 5.
 }.
 
+Local adjustment_vec to vecdraw().
+Set adjustment_vec:color to blue.
+Set adjustment_vec:width to 1.0.
+
+Local impact_vec to vecdraw().
+Set impact_vec:color to green.
+Set impact_vec:width to 5.0.
+
+Local impact_error_control to vector_control_loop().
+Local adjustment_integral to vector_integral(0.05).
 Local function distortion_vector {
+  Local facing_direction to ship:facing.
+  Local height to ship:altitude - launchpad_altitude - bounds:furthestCorner(-facing_direction:vector):mag.
   Local upvec to ship:up:vector.
-  Local targetvec to vxcl(upvec, target_position).
-  If should_abort() { Set targetvec to V(0,0,0). }.
-  Local up_component to 20 * upvec.
-  Local horiz_component to 0.17 * targetvec.
-  If NAIVE { Set horiz_component to V(0,0,0). }.
-  Local speed to ship:airspeed.
-  If speed < 10 {
-    Set horiz_component to (2 - 0.1 * speed) * horiz_component.
-  }.
-  Return horiz_component + up_component.
+  Local impact_pos to impact_position_and_time(height, vxcl(upvec, ship:velocity:surface)).
+  Local time_to_impact to impact_pos[1].
+  Set impact_pos to impact_pos[0].
+  Local impact_error to vxcl(upvec, target_position - impact_pos).
+  Set impact_error to impact_error_control(time:seconds, impact_error, 0.5 * time_to_impact).
+  // <DEBUG>
+  Set impact_vec:vec to target_position - impact_error.
+  Impact_vec:show on.
+  // </DEBUG>
+  // Aim a bit farther out to end up descending vertically.
+  Set impact_error to impact_error + (max(0, height - 2000) / 25) * vxcl(upvec, target_position):normalized.
+  Set impact_error to impact_error / (height + 10).
+  Local adjustment to vxcl(facing_direction:vector, -impact_error).
+  Set adjustment to adjustment + adjustment_integral(time:seconds, adjustment).
+  If should_abort() or NAIVE { Set adjustment to V(0,0,0). }.
+  Local up_component to 1.0 * upvec.
+  // <DEBUG>
+  Set adjustment_vec:vec to 200 * adjustment.
+  Adjustment_vec:show on.
+  // </DEBUG>
+  Return adjustment.// + up_component.
 }.
 
 Local function low_altitude_steering_seq {
-  Local MAX_DIST_FROM_RETROGRADE to 2.0.
+  Local MAX_DIST_FROM_RETROGRADE to 0.2.
   If NAIVE { Set MAX_DIST_FROM_RETROGRADE to 0.0. }.
   Local target_direction to -target_position:normalized.
   Return list(
@@ -459,9 +484,7 @@ Local function low_altitude_steering_seq {
       }
 //      Set control:roll to vars:update_roll(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
 
-      // Point the tail a bit up from the target.
-      Set target_direction to -target_position:normalized.
-      Set target_direction to (target_direction + 0.5 * (target_direction - ship:up:forevector)):normalized.
+      Set target_direction to (-ship:velocity:surface:normalized + 4 * distortion_vector()):normalized.
 
       // But not so far up that you can't force it down again.
       Local angle_to_vertical to vang(ship:up:vector, target_direction).
@@ -483,8 +506,9 @@ Local function low_altitude_steering_seq {
 //        -vdot(target_direction, ship:facing:topvector)).
 //      Set control:yaw to pid_yaw:update(time:seconds,
 //        -vdot(target_direction, ship:facing:starvector)).
-      Set control:rotation to direction_rotation_controller(
+      Set control:rotation to 2 * direction_rotation_controller(
           target_direction,
+          zero_vec,
           srfprograde_angular_velocity(),
           rotation_kp,
           rotation_kd).
@@ -497,27 +521,42 @@ Local function low_altitude_steering_seq {
 //      Set pid_pitch to pf_controller(2.5, 4, -1, 1).
 //      Set pid_yaw to pf_controller(2.5, 4, -1, 1).
       Set target_direction to ship:up:vector.
+      //Set MAX_DIST_FROM_RETROGRADE to 0.0.
     }, 
-    control_flow:fork("disable_ctrl_surfaces", disable_control_surfaces_seq()), 
+    //control_flow:fork("disable_ctrl_surfaces", disable_control_surfaces_seq()), 
     {
 //      Set control:roll to pid_roll:update(time:seconds, -vdot(ship:angularvel, ship:facing:forevector)). 
-      Set target_direction to (-ship:velocity:surface + distortion_vector()):normalized.
+      Set target_direction to (-ship:velocity:surface:normalized -
+          (1 / (control:pilotmainthrottle + 1e-3)) * distortion_vector() + 0.1 * ship:up:vector):normalized.
+      If ship:airspeed < 10 {
+        Set target_direction to (target_direction + 2 * ship:up:vector):normalized.
+      }.
 
-      // Keep the angle close enough to vertical that we won't lose control.
-      Local angle_to_vertical to vang(ship:up:vector, target_direction).
-      Local max_allowed_angle to max_angle_to_vertical(ship:altitude).
-      If angle_to_vertical > max_allowed_angle {
-        Local axis to vcrs(target_direction, ship:up:vector):normalized.
-        Set target_direction to angleaxis(angle_to_vertical - max_allowed_angle, axis) * target_direction.
+      If ship:airspeed > 200 {
+        // Don't get too far away from retrograde, to maintain aerodynamic stability.
+        Local retro to ship:srfretrograde:forevector.
+        If (retro - target_direction):mag > MAX_DIST_FROM_RETROGRADE {
+          Set target_direction to (target_direction - vdot(target_direction, retro) * retro):normalized.
+          Set target_direction to (retro + MAX_DIST_FROM_RETROGRADE * target_direction):normalized.
+        }.
+      } else {
+        // Keep the angle close enough to vertical that we won't lose control.
+        Local angle_to_vertical to vang(ship:up:vector, target_direction).
+        Local max_allowed_angle to max_angle_to_vertical(ship:altitude).
+        If angle_to_vertical > max_allowed_angle {
+          Local axis to vcrs(target_direction, ship:up:vector):normalized.
+          Set target_direction to angleaxis(angle_to_vertical - max_allowed_angle, axis) * target_direction.
+        }.
       }.
 
 //      Set control:pitch to pid_pitch:update(time:seconds,
 //        -vdot(target_direction, ship:facing:topvector)).
 //      Set control:yaw to pid_yaw:update(time:seconds,
 //        -vdot(target_direction, ship:facing:starvector)).
-      Local factor to 0.3 / (control:pilotmainthrottle + 0.1).
+      Local factor to 3.//0.3 / (control:pilotmainthrottle + 0.1).
       Set control:rotation to factor * direction_rotation_controller(
           target_direction,
+          zero_vec,
           reference_frame_angular_velocity(),
           rotation_kp,
           rotation_kd).
@@ -546,8 +585,10 @@ Local function atm_speed_control_seq {
       Set_airbrakes(airbrake_smoother:update(time:seconds, 0.75 - pid_specific_energy:output)).
       Return true.
     },
-    { Return alt:radar >= 2000. },
+    { Return alt:radar >= 4000. },
     {
+      //Disable_several_engines().
+      Disable_gimbals().
       Set pid_thrust:setpoint to 0.
       Set vars["fake_locked_throttle"] to true.
       Set vars["smoothed_pid_thrust"] to lib_smoothing:exponential_moving_avg(0.5).
@@ -557,7 +598,7 @@ Local function atm_speed_control_seq {
       If not vars:fake_locked_throttle { Return false. }.
       Local time_secs to time:seconds.
       Local bottomaltradar to bounds:bottomaltradar.
-      Local sheddable_energy to ship:availablethrust * (bottomaltradar - 25).
+      Local sheddable_energy to ship:availablethrust * (bottomaltradar - 10).
       Local potential_energy to potential_energy_at_altitude(bottomaltradar).
 
       Local desired_kinetic_energy to max(0, sheddable_energy - potential_energy).

@@ -90,3 +90,34 @@ Global function direction_rotation_controller {
   Return V(yaw, pitch, roll).
 }.
 
+Global function vector_integral {
+  Parameter max_magnitude.
+  Local prev_time to -1.
+  Local prev_value to V(0,0,0).
+  Local accumulation to V(0,0,0).
+  Return {
+    Parameter new_time.
+    Parameter new_value.
+    If prev_time < 0 {
+      Set prev_time to new_time.
+      Set prev_value to new_value.
+      Set accumulation to V(0,0,0).
+      Return V(0,0,0).
+    }.
+    Local delta_t to new_time - prev_time.
+    If delta_t <= 0 {
+      Set prev_time to new_time.
+      Set prev_value to new_value.
+      Return accumulation.
+    }.
+    Set accumulation to accumulation + delta_t * prev_value.
+    Set prev_value to new_value.
+    Set prev_time to new_time.
+    Local accum_mag to accumulation:mag.
+    If accum_mag > max_magnitude {
+      Set accumulation to accumulation * (max_magnitude / accum_mag).
+    }.
+    Return accumulation.
+  }.
+}.
+

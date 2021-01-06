@@ -9,6 +9,7 @@ Local function assert {
   }
 }
 
+Local ZERO_VEC to V(0,0,0).
 
 // "proportional-future controller"
 Global function pf_controller {
@@ -46,7 +47,7 @@ Global function direction_rotation_controller {
   Local time_secs to time:seconds.
   Local ship_facing to ship:facing.
   Local current_direction to ship_facing:vector.
-  Local comparison_angular_velocity to V(0,0,0).
+  Local comparison_angular_velocity to ZERO_VEC.
   If prev_time > 0 {
     Local ship_facing_up to ship_facing:upvector.
     Set comparison_angular_velocity to
@@ -68,7 +69,7 @@ Global function direction_rotation_controller {
   }.
   Local delta_direction_torque to delta_direction_mag * vcrs(current_direction, delta_direction):normalized.
 
-  Local delta_up_torque to V(0,0,0).
+  Local delta_up_torque to ZERO_VEC.
   If desired_up:mag > 1e-6 {
     Set desired_up to vxcl(desired_direction, desired_up):normalized.
     Local current_up to ship_facing:upvector.
@@ -90,19 +91,20 @@ Global function direction_rotation_controller {
   Return V(yaw, pitch, roll).
 }.
 
+
 Global function vector_integral {
   Parameter max_magnitude.
   Local prev_time to -1.
-  Local prev_value to V(0,0,0).
-  Local accumulation to V(0,0,0).
+  Local prev_value to ZERO_VEC.
+  Local accumulation to ZERO_VEC.
   Return {
     Parameter new_time.
     Parameter new_value.
     If prev_time < 0 {
       Set prev_time to new_time.
       Set prev_value to new_value.
-      Set accumulation to V(0,0,0).
-      Return V(0,0,0).
+      Set accumulation to ZERO_VEC.
+      Return ZERO_VEC.
     }.
     Local delta_t to new_time - prev_time.
     If delta_t <= 0 {
@@ -118,6 +120,30 @@ Global function vector_integral {
       Set accumulation to accumulation * (max_magnitude / accum_mag).
     }.
     Return accumulation.
+  }.
+}.
+
+Global function vector_derivative {
+  Local prev_time to -1.
+  Local prev_value to ZERO_VEC.
+  Return {
+    Parameter new_time.
+    Parameter new_value.
+    If prev_time < 0 {
+      Set prev_time to new_time.
+      Set prev_value to new_value.
+      Return ZERO_VEC.
+    }.
+    Local delta_t to new_time - prev_time.
+    If delta_t <= 0 {
+      Set prev_time to new_time.
+      Set prev_value to new_value.
+      Return ZERO_VEC.
+    }.
+    Local delta_v to new_value - prev_value.
+    Set prev_time to new_time.
+    Set prev_value to new_value.
+    Return delta_v / delta_t.
   }.
 }.
 

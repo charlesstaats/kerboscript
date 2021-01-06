@@ -455,6 +455,11 @@ Local function update_impact_error {
 Local function distortion_vector {
   Local impact_error to update_impact_error().
   Local adjustment to vxcl(ship:facing:vector, -impact_error).
+  // Exaggerate the lateral adjustment since the desired heading, once fixed, tends to
+  // stay fixed (unlike the desired vertical angle, which requires constant adjustment).
+  Local lateral_axis to vcrs(ship:up:vector, target_position):normalized.
+  Set adjustment to adjustment + 0.2 * vdot(lateral_axis, adjustment) * lateral_axis.
+  // This seems to help.
   Set adjustment to adjustment + adjustment_integral(time:seconds, adjustment).
   If should_abort() or NAIVE { Set adjustment to V(0,0,0). }.
   // <DEBUG>
@@ -526,39 +531,26 @@ Local function low_altitude_steering_seq {
 //      Set pid_pitch to pf_controller(2.5, 4, -1, 1).
 //      Set pid_yaw to pf_controller(2.5, 4, -1, 1).
       Set target_direction to ship:up:vector.
+      Set vars["target_direction_deriv"] to vector_derivative().
       //Set MAX_DIST_FROM_RETROGRADE to 0.0.
     }, 
     //control_flow:fork("disable_ctrl_surfaces", disable_control_surfaces_seq()), 
     {
       Local upvec to ship:up:vector.
-      local horiz_velocity to vxcl(upvec, ship:velocity:surface).
-      local desired_horiz_velocity to V(0, 0, 0).
-      if bounds:bottomaltradar > 30 {
-        set desired_horiz_velocity to vxcl(upvec, 0.1 * target_position).
-      }
-      local look_at_horiz to 2 * update_impact_error().
-      local look_at to upvec + look_at_horiz.
-
-      // Keep the angle close enough to vertical that we won't lose control.
-      Local angle_to_vertical to vang(upvec, look_at).
-      Local max_allowed_angle to max_angle_to_vertical(ship:altitude).
-      If angle_to_vertical > max_allowed_angle {
-        Set look_at to upvec + tan(max_allowed_angle) * look_at_horiz:normalized.
-      }.
-
-//      Set control:pitch to pid_pitch:update(time:seconds,
-//        -vdot(look_at, ship:facing:topvector)).
-//      Set control:yaw to pid_yaw:update(time:seconds,
-//        -vdot(look_at, ship:facing:starvector)).
-      Local factor to 3.//0.3 / (control:pilotmainthrottle + 0.1).
-      If round(10 * time:seconds) = 10 * round(time:seconds) {
-        Print "angle to vertical: " + vang(upvec, ship:facing:vector).
-        Print "max allowed angle: " + max_allowed_angle.
-      }.
+      Local retrogradevec to ship:srfretrograde:vector.
+      Local axis to vcrs(upvec, retrogradevec). 
+      Local angle_factor to 1.0.
+      Local angle to angle_factor * vang(upvec, retrogradevec).
+      Set angle to min(angle,  max_angle_to_vertical(ship:altitude)).
+      Local look_at to angleAxis(angle, axis) * upvec.
+      Local desired_angular_velocity to reference_frame_angular_velocity().
+      Set look_at to look_at + max(0, 0.05 * ship:verticalspeed + 1) * upvec.
+      Local factor to 0.5 / (control:pilotmainthrottle + 0.1).
+      Set rotation_kd to 1.0 * rotation_kp.
       Set control:rotation to factor * direction_rotation_controller(
           look_at,
           zero_vec,
-          reference_frame_angular_velocity(),
+          desired_angular_velocity,
           rotation_kp,
           rotation_kd).
       Return ship:status = "FLYING" or ship:airspeed > 0.5 or
@@ -589,7 +581,7 @@ Local function atm_speed_control_seq {
     { Return alt:radar >= 4000. },
     {
       //Disable_several_engines().
-      Disable_gimbals().
+      //Disable_gimbals().
       Set pid_thrust:setpoint to 0.
       Set vars["fake_locked_throttle"] to true.
       Set vars["smoothed_pid_thrust"] to lib_smoothing:exponential_moving_avg(0.5).
@@ -599,7 +591,7 @@ Local function atm_speed_control_seq {
       If not vars:fake_locked_throttle { Return false. }.
       Local time_secs to time:seconds.
       Local bottomaltradar to bounds:bottomaltradar.
-      Local sheddable_energy to ship:availablethrust * (bottomaltradar - 10).
+      Local sheddable_energy to ship:availablethrust * (bottomaltradar - 0).
       Local potential_energy to potential_energy_at_altitude(bottomaltradar).
 
       Local desired_kinetic_energy to max(0, sheddable_energy - potential_energy).
@@ -608,7 +600,8 @@ Local function atm_speed_control_seq {
       Set desired_verticalspeed to min(-3.0, desired_verticalspeed).
       Set control:pilotmainthrottle to vars:smoothed_pid_thrust:update(time_secs,
           weight() / ship:availablethrust + pid_thrust:update(
-            time_secs, ship:verticalspeed - desired_verticalspeed)).
+            time_secs, ship:verticalspeed - desired_verticalspeed)) /
+          (ship:facing:vector * ship:up:vector).
 //      Set control:pilotmainthrottle to clip(vars:smoothed_pid_thrust:update(
 //          time_secs,
 //          pid_thrust:update(time:seconds, bounds:bottomaltradar)

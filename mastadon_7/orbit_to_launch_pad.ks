@@ -433,9 +433,13 @@ Set impact_vec:width to 5.0.
 Local impact_error_control to vector_control_loop().
 Local adjustment_integral to vector_integral(0.05).
 
+Local function launchpad_vertical_distance {
+  Return ship:altitude - launchpad_altitude - bounds:furthestCorner(-ship:facing:vector):mag.
+}.
+
 Local function update_impact_error {
   Local facing_direction to ship:facing.
-  Local height to ship:altitude - launchpad_altitude - bounds:furthestCorner(-facing_direction:vector):mag.
+  Local height to launchpad_vertical_distance().
   Local upvec to ship:up:vector.
   Local impact_pos to impact_position_and_time(height, vxcl(upvec, ship:velocity:surface)).
   Local time_to_impact to impact_pos[1].
@@ -446,14 +450,15 @@ Local function update_impact_error {
   Set impact_vec:vec to target_position - impact_error.
   Impact_vec:show on.
   // </DEBUG>
-  // Aim a bit farther out to end up descending vertically.
-  Set impact_error to impact_error + (max(0, height - 2000) / 25) * vxcl(upvec, target_position):normalized.
-  Set impact_error to impact_error / (height + 10).
   Return impact_error.
 }.
 
 Local function distortion_vector {
   Local impact_error to update_impact_error().
+  // Aim a bit farther out to end up at the correct point after the burn.
+  Set impact_error to impact_error + 100 * vxcl(ship:up:vector, target_position):normalized.
+  Local height to launchpad_vertical_distance().
+  Set impact_error to impact_error / (height + 10).
   Local adjustment to vxcl(ship:facing:vector, -impact_error).
   // Exaggerate the lateral adjustment since the desired heading, once fixed, tends to
   // stay fixed (unlike the desired vertical angle, which requires constant adjustment).
@@ -470,7 +475,7 @@ Local function distortion_vector {
 }.
 
 Local function low_altitude_steering_seq {
-  Local MAX_DIST_FROM_RETROGRADE to 0.2.
+  Local MAX_DIST_FROM_RETROGRADE to 0.1.
   If NAIVE { Set MAX_DIST_FROM_RETROGRADE to 0.0. }.
   Local target_direction to -target_position:normalized.
   Return list(
@@ -539,13 +544,22 @@ Local function low_altitude_steering_seq {
       Local upvec to ship:up:vector.
       Local retrogradevec to ship:srfretrograde:vector.
       Local axis to vcrs(upvec, retrogradevec). 
-      Local angle_factor to 1.0.
+      Local horiz_speed to vxcl(upvec, ship:velocity:surface):mag.
+      Local angle_factor to 1.2.
       Local angle to angle_factor * vang(upvec, retrogradevec).
-      Set angle to min(angle,  max_angle_to_vertical(ship:altitude)).
-      Local look_at to angleAxis(angle, axis) * upvec.
+      //Set angle to min(angle,  max_angle_to_vertical(ship:altitude)).
+      Local look_at to angleAxis(angle, axis) * upvec + 0.01 * update_impact_error().
       Local desired_angular_velocity to reference_frame_angular_velocity().
-      Set look_at to look_at + max(0, 0.05 * ship:verticalspeed + 1) * upvec.
-      Local factor to 0.5 / (control:pilotmainthrottle + 0.1).
+      Set look_at to look_at + max(0, 0.01 * ship:verticalspeed + 1) * upvec.
+      Local max_vertical_angle to max_angle_to_vertical(ship:altitude).
+      If vang(look_at, upvec) > max_vertical_angle {
+        Set look_at to upvec + tan(max_vertical_angle) * vxcl(upvec, look_at):normalized.
+      }.
+      Local MAX_RETROGRADE_ANGLE to 5.
+      If ship:Q > 0.1 and vang(look_at, retrogradevec) > MAX_RETROGRADE_ANGLE {
+        Set look_at to retrogradevec + tan(MAX_RETROGRADE_ANGLE) * vxcl(retrogradevec, look_at):normalized.
+      }.
+      Local factor to 0.3 / (control:pilotmainthrottle + 0.1).
       Set rotation_kd to 1.0 * rotation_kp.
       Set control:rotation to factor * direction_rotation_controller(
           look_at,
@@ -580,7 +594,7 @@ Local function atm_speed_control_seq {
     },
     { Return alt:radar >= 4000. },
     {
-      //Disable_several_engines().
+      Disable_several_engines().
       //Disable_gimbals().
       Set pid_thrust:setpoint to 0.
       Set vars["fake_locked_throttle"] to true.
@@ -589,18 +603,23 @@ Local function atm_speed_control_seq {
     },
     control_flow:fork("throttle_control_landing", {
       If not vars:fake_locked_throttle { Return false. }.
+      Local current_verticalspeed to ship:verticalspeed.
+      If current_verticalspeed > 0 {
+        Set control:pilotmainthrottle to 0.
+        Return false.
+      }.
       Local time_secs to time:seconds.
       Local bottomaltradar to bounds:bottomaltradar.
-      Local sheddable_energy to ship:availablethrust * (bottomaltradar - 0).
+      Local sheddable_energy to ship:availablethrust * (bottomaltradar - 2).
       Local potential_energy to potential_energy_at_altitude(bottomaltradar).
 
       Local desired_kinetic_energy to max(0, sheddable_energy - potential_energy).
       Local desired_verticalspeed to sqrt(2 * desired_kinetic_energy / ship:mass).
       Set desired_verticalspeed to -0.8 * desired_verticalspeed.
-      Set desired_verticalspeed to min(-3.0, desired_verticalspeed).
+      Set desired_verticalspeed to min(-1.0, desired_verticalspeed).
       Set control:pilotmainthrottle to vars:smoothed_pid_thrust:update(time_secs,
           weight() / ship:availablethrust + pid_thrust:update(
-            time_secs, ship:verticalspeed - desired_verticalspeed)) /
+            time_secs, current_verticalspeed - desired_verticalspeed)) /
           (ship:facing:vector * ship:up:vector).
 //      Set control:pilotmainthrottle to clip(vars:smoothed_pid_thrust:update(
 //          time_secs,

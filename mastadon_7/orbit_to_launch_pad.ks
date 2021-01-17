@@ -460,10 +460,10 @@ Local function distortion_vector {
   Local height to launchpad_vertical_distance().
   Set impact_error to impact_error / (height + 10).
   Local adjustment to vxcl(ship:facing:vector, -impact_error).
-  // Exaggerate the lateral adjustment since the desired heading, once fixed, tends to
-  // stay fixed (unlike the desired vertical angle, which requires constant adjustment).
-  Local lateral_axis to vcrs(ship:up:vector, target_position):normalized.
-  Set adjustment to adjustment + 0.2 * vdot(lateral_axis, adjustment) * lateral_axis.
+//  // Exaggerate the lateral adjustment since the desired heading, once fixed, tends to
+//  // stay fixed (unlike the desired vertical angle, which requires constant adjustment).
+//  Local lateral_axis to vcrs(ship:up:vector, target_position):normalized.
+//  Set adjustment to adjustment + 0.2 * vdot(lateral_axis, adjustment) * lateral_axis.
   // This seems to help.
   Set adjustment to adjustment + adjustment_integral(time:seconds, adjustment).
   If should_abort() or NAIVE { Set adjustment to V(0,0,0). }.
@@ -516,6 +516,13 @@ Local function low_altitude_steering_seq {
         Set target_direction to (target_direction - vdot(target_direction, retro) * retro):normalized.
         Set target_direction to (retro + MAX_DIST_FROM_RETROGRADE * target_direction):normalized.
       }
+      
+      Local retro_facing_diff to (retro - ship:facing:vector):mag.
+      If retro_facing_diff > MAX_DIST_FROM_RETROGRADE + 0.02 {
+        If not RCS { RCS on. }.
+      } else if retro_facing_diff < MAX_DIST_FROM_RETROGRADE {
+        If RCS { RCS off. }.
+      }.
 
 //      Set control:pitch to pid_pitch:update(time:seconds,
 //        -vdot(target_direction, ship:facing:topvector)).
@@ -630,26 +637,6 @@ Local function atm_speed_control_seq {
 //      }.
       Return true.
     }),
-    {
-      If should_abort() { 
-        HUDText("Trying to land NOW rather than return to launch pad!",
-                10, 1, 15, red, false).
-        Return false.
-      }.
-      If alt:radar >= 175 or ship:airspeed >= 6 { Return true. }.
-      Local height to bounds:bottomaltradar.
-      Local upvec to ship:up:vector.
-      Local horiz_velocity to vxcl(upvec, ship:velocity:surface).
-      Return vxcl(upvec, impact_position_horiz(height, horiz_velocity) - target_position):mag > 6.
-    },
-//    {
-//      Set pid_thrust to pf_controller(0.03, 3.0, -1, 1).
-//      Vars:smoothed_pid_thrust:reset(0.0, 0.5).
-//      Set pid_thrust:setpoint to
-//          choose -7.0
-//          if over_water()
-//          else -3.0.
-//    },
     { Return ship:status = "FLYING" or ship:airspeed > 0.2 or bounds:bottomaltradar > 1. },
     {
       RCS off.

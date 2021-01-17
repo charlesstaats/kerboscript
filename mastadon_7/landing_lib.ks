@@ -39,7 +39,7 @@ Function max_angle_to_vertical {
 
 Global function current_heading {
   Local direction to ship:srfprograde:vector.
-  Return arctan2(direction * ship:north:starvector, direction * ship:north:vector).
+  Return arctan2(direction * heading(90, 0):vector, direction * ship:north:vector).
 }.
 
 Local function time_to_impact {

@@ -1,5 +1,7 @@
 @LAZYGLOBAL OFF.
 
+Parameter ENGAGE to false.
+
 RunOncePath("0:/my_lib/clip").
 
 Global FakeRCS to lex().
@@ -54,4 +56,12 @@ Set FakeRCS["engage"] to {
     Set_fake_rcs().
     Return true.
   }.
+}.
+
+If ENGAGE {
+  If not RCS {
+    Print "Don't forget to turn on RCS!".
+  }.
+  FakeRCS:engage().
+  Wait until false.
 }.

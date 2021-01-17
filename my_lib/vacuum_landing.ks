@@ -4,6 +4,7 @@ RunOncePath("0:/my_lib/clip").
 
 Parameter USE_GEAR to true.
 Parameter MAX_LANDING_ANGLE to 45.
+Parameter LAST_MINUTE_STEERING to true.
 
 Function available_thrust_facing {
   Local facing_dir to ship:facing:vector.
@@ -85,37 +86,41 @@ Wait until bounds:bottomaltradar < 400.
 If USE_GEAR { Gear on. }.
 Throttle_smoother:reset(throttle_smoother:get(), 0.25).
 Wait until bounds:bottomaltradar < 50.// and vxcl(ship:up:vector, ship:velocity:surface):mag < 5.
-SAS off.
-RCS on.
-Function steering_direction {
-  Local simple to 5 * ship:up:vector - ship:velocity:surface.
-  If vang(simple, ship:up:vector) > MAX_LANDING_ANGLE {
-    Local axis to vcrs(ship:up:vector, simple).
-    Return angleaxis(MAX_LANDING_ANGLE, axis) * ship:up:vector.
+If LAST_MINUTE_STEERING {
+  SAS off.
+  RCS on.
+  Function steering_direction {
+    Local simple to 5 * ship:up:vector - ship:velocity:surface.
+    If vang(simple, ship:up:vector) > MAX_LANDING_ANGLE {
+      Local axis to vcrs(ship:up:vector, simple).
+      Return angleaxis(MAX_LANDING_ANGLE, axis) * ship:up:vector.
+    }.
+    Return simple.
   }.
-  Return simple.
+  Lock steering to lookDirUp(steering_direction(), ship:facing:upvector).
 }.
-Lock steering to lookDirUp(steering_direction(), ship:facing:upvector).
 Local prev_ag3 to AG3.
 Wait until AG3 <> prev_ag3 or landed_for > 2.0.
 Set auto_thrust to false.
 Wait until thrust_loop_exited.
 Set ship:control:pilotmainthrottle to 0.0.
 
-Lock steering to (choose ship:facing if ship:angularvel:mag < constant:DegToRad * 0.3 else lookDirUp(ship:up:vector, ship:facing:upvector)).
-Set prev_time_secs to time:seconds.
-Set landed_for to 0.0.
-On time:seconds {
-  If ship:status = "LANDED" and ship:velocity:surface:mag < 0.2 and ship:angularvel:mag < constant:DegToRad * 0.1 {
-    Set landed_for to landed_for + (time:seconds - prev_time_secs).
-  } else {
-    Set landed_for to 0.0.
-  }.
+If LAST_MINUTE_STEERING {
+  Lock steering to (choose ship:facing if ship:angularvel:mag < constant:DegToRad * 0.3 else lookDirUp(ship:up:vector, ship:facing:upvector)).
   Set prev_time_secs to time:seconds.
-  Return landed_for <= 2.0.
-}
+  Set landed_for to 0.0.
+  On time:seconds {
+    If ship:status = "LANDED" and ship:velocity:surface:mag < 0.2 and ship:angularvel:mag < constant:DegToRad * 0.1 {
+      Set landed_for to landed_for + (time:seconds - prev_time_secs).
+    } else {
+      Set landed_for to 0.0.
+    }.
+    Set prev_time_secs to time:seconds.
+    Return landed_for <= 2.0.
+  }
 
-Wait until landed_for > 2.0.
+  Wait until landed_for > 2.0.
+}.
 
 Unlock steering.
 HUDText("Script finished. Reverting to manual control.", 10, 2, 15, red, true).

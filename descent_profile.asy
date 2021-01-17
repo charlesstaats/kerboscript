@@ -32,6 +32,7 @@ for (real[] datapoint: data) {
 
 real KERBIN_RADIUS = 600 * 1000;
 real G_STD = 9.80665;
+real KERBIN_G = 9.81;
 
 int ergy_index = 4;
 
@@ -40,7 +41,7 @@ for (real[] datapoint : data) {
   real altitude = datapoint[alt_index];
   real speed = datapoint[airspeed_index];
   real kinetic = speed * speed / 2;
-  real potential = G_STD * KERBIN_RADIUS * (1 - KERBIN_RADIUS / (altitude + KERBIN_RADIUS));
+  real potential = KERBIN_G * KERBIN_RADIUS * (1 - KERBIN_RADIUS / (altitude + KERBIN_RADIUS));
   real energy_over_mass = kinetic + potential;
   datapoint.push(energy_over_mass);
 }

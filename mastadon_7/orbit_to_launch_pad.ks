@@ -256,7 +256,12 @@ Local function deorbit_seq {
     Control_flow:fork("lock_retrograde", list(
       {
         If not vars:hasKey("rcs_retrograde") { Return false. }.
-        Set control:rotation to direction_rotation_controller(-ship:prograde:vector, zero_vec, zero_vec, 10.0, 50.0).
+        Set control:rotation to direction_rotation_controller(
+            -ship:prograde:vector,
+            zero_vec,
+            prograde_angular_velocity(),
+            10.0,
+            50.0).
         Return true.
       }
     )),
@@ -307,6 +312,7 @@ Cf:register_op("update_alt_and_specific_energy_pids", {
   Local alt_meters to ship:altitude.
   Local time_secs to time:seconds.
   If alt_meters <= AIMING_ALTITUDE {
+    Set control:pilotmainthrottle to 0.
     Return list().
   }.
   Local specific_energy_error to specific_energy(alt_meters) - expected_specific_energy_at(phase_angle).
@@ -385,7 +391,7 @@ Local function high_altitude_steering_seq {
 
       Local target_heading to target_geo:heading.
       Local heading_now to current_heading().
-      If abs(target_heading - heading_now) < 5 {
+      If not NAIVE and abs(target_heading - heading_now) < 5 {
         Local heading_shift to clip(100 * (target_heading - heading_now), -5, 5).
         Set target_direction to angleaxis(heading_shift, ship:up:vector) * target_direction.
       }.

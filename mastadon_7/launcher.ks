@@ -7,29 +7,6 @@ RunOncePath("0:/my_lib/controller").
 RunOncePath("0:/my_lib/fake_rcs").
 RunOncePath("0:/my_lib/lib_smoothing").
 
-Local function define_update_eta {
-  Local pid_eta is pidloop(0, 0, 1.0).
-  Local prev_output is 0.
-  Local prev_dOdt is 0.
-  Local prev_time is 0.
-  Return {
-    Local current_time is time:seconds.
-    If prev_time = 0 { Set prev_time to current_time. }.
-    If prev_time = current_time { Return prev_output. }.
-    Local interval is current_time - prev_time.
-    Set prev_time to current_time.
-    Local adjusted_apoapsis to eta:apoapsis.
-    If adjusted_apoapsis > ship:orbit:period / 2 {
-      Set adjusted_apoapsis to adjusted_apoapsis - ship:orbit:period.
-    }.
-    Local dOdt is pid_eta:update(current_time, adjusted_apoapsis) - 0.2.
-    Local retv is clip(0.2 * prev_dOdt * interval + prev_output, 0, 1).
-    Set prev_output to retv.
-    Set prev_dOdt to dOdt.
-    Return retv.
-  }.
-}
-
 Local function adjusted_eta {
   Parameter raw_eta_seconds.
   Local period_var to ship:orbit:period.
@@ -38,15 +15,6 @@ Local function adjusted_eta {
   }.
   Return raw_eta_seconds.
 }.
-
-Local function is_apoapsis_closer {
-  Local period is ship:orbit:period.
-  Local eta_ap is eta:apoapsis.
-  Local ap_dist is min(eta_ap, period - eta_ap).
-  Local eta_per is eta:periapsis.
-  Local per_dist is min(eta_per, period - eta_per).
-  Return ap_dist < per_dist.
-}
 
 Local function reference_frame_angular_velocity {
   Return vcrs(ship:velocity:orbit, body:position) / body:position:sqrmagnitude.
@@ -107,6 +75,14 @@ function Launch {
   
   Local cf to control_flow:new().
 
+//  FakeRCS:find_engines().
+//  Cf:background:register_and_enqueue_op("fakercs",
+//    {
+//      FakeRCS:adjust().
+//      Return "fakercs".
+//    }
+//  ).
+//
   Local start_time to time:seconds.
   Cf:enqueue_op("ignition").
   Cf:register_op("ignition", {
@@ -117,12 +93,17 @@ function Launch {
     Return list("throttle", "steering").
   }).
 
+  Cf:register_and_enqueue_op("deploy_faring", {
+    If ship:airspeed < 1000 or ship:Q > 0.001 {
+      Return "deploy_faring".
+    }.
+    Stage.
+    Return list().
+  }).
+
   {
     Local pid_throttle is pidloop(50.0, 2.0, 50.0, 0, 1).
     Set pid_throttle:setpoint to MAX_DYNAMIC_PRESSURE.
-    Local update_eta to define_update_eta().
-    Local eng_list to list().
-    List engines in eng_list.
     Local burn_time to 0.
     Cf:register_sequence("throttle", list(
       {
@@ -132,6 +113,7 @@ function Launch {
         Set control:pilotmainthrottle to pid_throttle:update(time:seconds, ship:Q).
         Return alt:apoapsis < GOAL_APOAPSIS - 2000.
       }, {
+        RCS on.
         Set pid_throttle to pf_controller(0.01, 1, 0, 1).
         Set pid_throttle:setpoint to GOAL_APOAPSIS.
         Set control:pilotmainthrottle to pid_throttle:update(time:seconds, alt:apoapsis).
@@ -152,6 +134,7 @@ function Launch {
         Return nextNode:eta > burn_time / 2.
       },
       {
+        RCS off.
         Set control:pilotmainthrottle to 1.0.
       },
       {
@@ -217,13 +200,16 @@ function Launch {
       {
         Local prograde to surface_fraction_prograde * ship:velocity:surface:normalized +
                           (1 - surface_fraction_prograde) * ship:velocity:orbit:normalized.
-        Local desired_facing to heading(90, 90 - vang(ship:up:vector, prograde)):vector.
+        Local desired_angle_to_east to arcsin(ship:up:vector * vcrs(vxcl(ship:up:vector, prograde):normalized, heading(90, 0):vector)).
+        Local desired_facing to heading(90 + desired_angle_to_east, 90 - vang(ship:up:vector, prograde)):vector.
         Local desired_up to vxcl(desired_facing, -ship:up:vector).
         Local desired_angular_velocity to
             surface_fraction_prograde * srfprograde_angular_velocity() +
             (1 - surface_fraction_prograde) * prograde_angular_velocity().
+        Local factor to //choose 1.0 if RCS else
+            (1 / (0.01 + control:pilotmainthrottle)).
         Local control_rotation to
-            (1 / max(1e-3, control:pilotmainthrottle)) * direction_rotation_controller(
+            factor * direction_rotation_controller(
                 desired_facing,
                 desired_up,
                 desired_angular_velocity,
@@ -240,14 +226,15 @@ function Launch {
 //        Set attitude_adjustment to clip(attitude_adjustment, -10, 10).
 //        Set attitude_adjustment to smoothed_pid_apoapsis:update(time_secs, attitude_adjustment).
 //        Local desired_heading to heading(90, attitude_adjustment).
-        Local factor to choose 1.0 if RCS else (1 / max(1e-3, control:pilotmainthrottle)).
+        Local factor to //choose 1.0 if RCS else
+            (1 / (0.01 + control:pilotmainthrottle)).
         Set control:rotation to
              factor * direction_rotation_controller(
                 target_direction,
                 -ship:up:vector,
-                prograde_angular_velocity(),
+                V(0,0,0),
                 rotation_kp,
-                rotation_kd).
+                2 * rotation_kd).
         Return nextNode:eta > 0.
       },
       {
@@ -266,9 +253,6 @@ function Launch {
 
     Cf:register_sequence("surface_to_orbital_prograde", list(
       { Return ship:Q >= 0.01 or ship:airspeed < 1000. },
-      {
-        Stage.  // deploy payload fairing
-      },
       {
         // Ensure change is gradual.
         Set surface_fraction_prograde to clip(ship:Q / 0.01, 0, 1).

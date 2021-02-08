@@ -21,8 +21,6 @@ Global function split_booster_burn {
   Local booster_intermediate_over_final to
       sqrt((booster_initial_mass + payload_mass) / booster_final_mass + payload_over_2booster^2)
         - payload_over_2booster. 
-  Print booster_intermediate_over_final.
-  Print specific_impulse.
   
   Local exhaust_speed to specific_impulse * CONSTANT:g0.
   Return exhaust_speed * ln(booster_intermediate_over_final).

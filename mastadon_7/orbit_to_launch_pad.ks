@@ -428,13 +428,15 @@ Local function over_water {
   Return abs(ship:altitude - alt:radar) <= 5.
 }.
 
-Local adjustment_vec to vecdraw().
-Set adjustment_vec:color to blue.
-Set adjustment_vec:width to 1.0.
+Local kinematic_impact_vec to vecdraw().
+Set kinematic_impact_vec:color to blue.
+Set kinematic_impact_vec:label to "kinematic impact".
 
 Local impact_vec to vecdraw().
 Set impact_vec:color to green.
-Set impact_vec:width to 5.0.
+Set impact_vec:label to "extrapolated impact".
+
+
 
 Local impact_error_control to vector_control_loop().
 Local adjustment_integral to vector_integral(0.05).
@@ -455,6 +457,8 @@ Local function update_impact_error {
   // <DEBUG>
   Set impact_vec:vec to target_position - impact_error.
   Impact_vec:show on.
+  Set kinematic_impact_vec:vec to (impact_pos - height * upvec).
+  Kinematic_impact_vec:show on.
   // </DEBUG>
   Return impact_error.
 }.
@@ -474,8 +478,8 @@ Local function distortion_vector {
   Set adjustment to adjustment + adjustment_integral(time:seconds, adjustment).
   If should_abort() or NAIVE { Set adjustment to V(0,0,0). }.
   // <DEBUG>
-  Set adjustment_vec:vec to 200 * adjustment.
-  Adjustment_vec:show on.
+  //Set adjustment_vec:vec to 200 * adjustment.
+  //Adjustment_vec:show on.
   // </DEBUG>
   Return adjustment.
 }.

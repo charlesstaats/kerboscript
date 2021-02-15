@@ -1,6 +1,11 @@
 @LAZYGLOBAL off.
 
+Parameter return_to_launchpad to false.
+
 RunOncePath("0:/KSLib/library/lib_location_constants").
+RunOncePath("0:/my_lib/clip").
+RunOncePath("0:/my_lib/controller").
+RunOncePath("0:/my_lib/lib_smoothing").
 RunOncePath("0:/planette/slope").
 
 Local desired_geolocation to ship:geoposition.
@@ -10,16 +15,29 @@ For wp in allWaypoints() {
   }.
 }.
 Set desired_geolocation to flattest_location_near(desired_geolocation).
-//Local desired_geolocation to location_constants:kerbin:launchpad.
+Local landing_sideways_heading to descent_heading(desired_geolocation).
+On round(0.1 * time:seconds) {
+  Set landing_sideways_heading to descent_heading(desired_geolocation).
+}.
+If return_to_launchpad {
+  Set desired_geolocation to location_constants:kerbin:launchpad.
+}.
 Local function target_position {
   Return desired_geolocation:position.
 }.
 
-Local stop_waiting to false.
+Local keep_waiting to true.
 On AG2 {
-  Stop_waiting on.
+  Keep_waiting off.
 }.
-Wait until stop_waiting.
+Wait until not keep_waiting.
+
+Local goal_arrow to vecdraw().
+On round(time:seconds) {
+  Set goal_arrow:vec to target_position().
+  Return true.
+}.
+Goal_arrow:show on.
 
 Local function distortion_vector {
   Local upvec to ship:up:vector.
@@ -30,23 +48,32 @@ Local function distortion_vector {
 }.
 
 SAS off.
+If addons:hassuffix("AA") {
+  Print "trying to turn of AtmosphereAutopilot".
+  Addons:aa:fbw on.
+  Addons:aa:fbw off.
+}
 
 Local control to ship:control.
-Local pid_roll to pidloop(1, 0, 4).
-Local pid_pitch to pidloop(1, 0, 6).
-Local pid_yaw to pidloop(1, 0, 6).
+//Local pid_roll to pidloop(1, 0, 4).
+//Local pid_pitch to pidloop(1, 0, 6).
+//Local pid_yaw to pidloop(1, 0, 6).
+Local rotation_kp to 1.0.
+Local rotation_kd to 3.0.
 Local pid_throttle to pidloop(1, 0, 10).
 
 Local throttle_var to 0.1.
 Lock throttle to throttle_var.
 
-When ship:altitude < 5000 and throttle_var < 1/3 then {
-  Toggle AG1.  // Switch to dry mode.
+When ship:altitude < 5000 and throttle_var < 0.45 then {
+  If alt:radar > 1000 {
+    Toggle AG1.  // Switch to dry mode.
+  }.
 }.
-When ship:altitude < 4000 and ship:airspeed < 70 then {
-  Set pid_pitch:kd to 1.
-  Set pid_yaw:kd to 1.
-}.
+//When ship:altitude < 4000 and ship:airspeed < 70 then {
+//  Set pid_pitch:kd to 1.
+//  Set pid_yaw:kd to 2.
+//}.
 
 Local bounds to ship:bounds.
 On round(time:seconds * 0.1) {
@@ -67,31 +94,41 @@ When time:seconds > init_time + 1 then {
   }.
 }.
 
+Local throttle_smoother to lib_smoothing:exponential_moving_avg(2.0).
 Local function update_throttle_toward {
   Parameter goal.
-  Local persistence to 0.995.
-  Set throttle_var to persistence * throttle_var + (1 - persistence) * goal.
+//  Local persistence to 0.995.
+//  Set throttle_var to persistence * throttle_var + (1 - persistence) * goal.
+  Set throttle_var to throttle_smoother:update(time:seconds, goal).
 }.
 
 
+Local eng_list to list().
+List engines in eng_list.
 Local function twr {
   Local body to ship:body.
   Local body_g to body:mu / body:radius^2.
   Local weight to body_g * ship:mass.
-  Return ship:availablethrust / weight.
+  Local thrust to 0.1.  // avoid returning zero thrust.
+  For eng in eng_list {
+    Set thrust to thrust + eng:thrust.
+  }.
+  Return V(thrust / weight, ship:availableThrust / weight, 0).
 }.
 
 Local function max_angle {
   Parameter current_altitude.
   Parameter current_height.
-  If current_altitude > 8000 or current_height < 100 {
+  If current_altitude > 10000 or current_height < 30 {
     Return 1.
   }.
   Return 10.
 }.
 
+Local ROLL_FACTOR to 4.
+Local roll_choice to 1.
 Until ship:status <> "FLYING" {
-  Local target_direction to (-ship:velocity:surface + distortion_vector()):normalized.
+  Local target_direction to (-ship:velocity:surface + 0.5 * distortion_vector()):normalized.
 
   // Keep the angle close enough to vertical that we won't lose control.
   Local angle_to_vertical to vang(ship:up:vector, target_direction).
@@ -101,20 +138,43 @@ Until ship:status <> "FLYING" {
     Local axis to vcrs(target_direction, ship:up:vector):normalized.
     Set target_direction to angleaxis(angle_to_vertical - max_allowed_angle, axis) * target_direction.
   }.
-  Local current_twr to twr().
-  Set control:roll to 4.0 / current_twr * pid_roll:update(
-    time:seconds,
-    //-vdot(ship:angularvel, ship:facing:forevector)). 
-    ship:facing:upvector * ship:srfprograde:vector).
-  Set control:pitch to 8.0 / current_twr * pid_pitch:update(time:seconds,
-    -vdot(target_direction, ship:facing:topvector)).
-  Set control:yaw to 8.0 / current_twr * pid_yaw:update(time:seconds,
-    -vdot(target_direction, ship:facing:starvector)).
+  Local twr_vec to twr().
+  Local current_twr to twr_vec:X.
+  Local available_twr to twr_vec:Y.
+  Local desired_up to ship:facing:upvector.
+  If ship:velocity:surface:mag < 10 {
+    Set desired_up to heading(landing_sideways_heading + 90, 0):vector.
+  } else {
+    If vang(ship:srfprograde:vector, roll_choice * ship:facing:upvector) > 100 {
+      Set roll_choice to -roll_choice.
+    }.
+    Set desired_up to angleaxis(roll_choice * 90, ship:facing:vector) * vxcl(ship:facing:vector, ship:srfprograde:vector).
+//    Set control:roll to 1.0 / current_twr * pid_roll:update(
+//      time:seconds,
+//      //-vdot(ship:angularvel, ship:facing:forevector)). 
+//      roll_choice * ship:facing:upvector * ship:srfprograde:vector).
+  }.
+//  Set control:pitch to 2.0 / current_twr * pid_pitch:update(time:seconds,
+//    -vdot(target_direction, ship:facing:topvector)).
+//  Set control:yaw to 4.0 / current_twr * pid_yaw:update(time:seconds,
+//    -vdot(target_direction, ship:facing:starvector)).
+  Local pre_rotation to 6 * (1 / current_twr) * direction_rotation_controller(
+      target_direction,
+      desired_up,
+      V(0,0,0),
+      rotation_kp,
+      rotation_kd).
+  Set pre_rotation:z to ROLL_FACTOR * pre_rotation:z.
+  Set control:rotation to pre_rotation.
 
-  Set pid_throttle:setpoint to -max(0.5, min(100, min(sqrt(height), 0.025 * height))).
-  Update_throttle_toward(min(1, max(0.1, 0.5 * pid_throttle:update(time:seconds, verticalspeed)
-                                         + 1 / current_twr))).  
-  If bounds:bottomaltradar < 250 and not gear { Gear on. }.
+
+  Local min_vertical_speed to 1.0.
+  If height < 10 { Set min_vertical_speed to 0.5. }.
+  Set pid_throttle:setpoint to -clip(min(sqrt(height), 0.025 * height), min_vertical_speed, 100).
+  Update_throttle_toward(clip(0.5 * pid_throttle:update(time:seconds, verticalspeed) + 1 / available_twr,
+                              0.1, 1.0)).
+  
+  If height < 250 and not gear { Gear on. }.
   Wait 0.
 }.
 
@@ -128,3 +188,4 @@ Wait 1.
 For ctrl_surface in Ctrl_surface_to_prev_setting:keys {
   Ctrl_surface:setfield("ctrl dflct", ctrl_surface_to_prev_setting[ctrl_surface]).
 }.
+Goal_arrow:show off.

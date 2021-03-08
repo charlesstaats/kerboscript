@@ -147,3 +147,50 @@ Global function vector_derivative {
   }.
 }.
 
+Global function scalar_derivative {
+  Local prev_time to -1.
+  Local prev_value to 0.
+  Return {
+    Parameter new_time.
+    Parameter new_value.
+    If prev_time < 0 {
+      Set prev_time to new_time.
+      Set prev_value to new_value.
+      Return 0.
+    }.
+    Local delta_t to new_time - prev_time.
+    If delta_t <= 0 {
+      Set prev_time to new_time.
+      Set prev_value to new_value.
+      Return 0.
+    }.
+    Local delta_v to new_value - prev_value.
+    Set prev_time to new_time.
+    Set prev_value to new_value.
+    Return delta_v / delta_t.
+  }.
+}.
+
+Global function direction_derivative {
+  Local prev_time to -1.
+  Local prev_direction to 0.
+  Return {
+    Parameter new_time.
+    Parameter new_direction.
+    If prev_time < 0 {
+      Set prev_time to new_time.
+      Set prev_direction to new_direction.
+      Return 0.
+    }.
+    Local delta_t to new_time - prev_time.
+    If delta_t <= 0 {
+      Set prev_time to new_time.
+      Set prev_direction to new_direction.
+      Return 0.
+    }.
+    Local delta_v to vang(new_direction, prev_direction).
+    Set prev_time to new_time.
+    Set prev_direction to new_direction.
+    Return delta_v / delta_t.
+  }.
+}.

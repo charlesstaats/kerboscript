@@ -15,3 +15,21 @@ function clip_vector_by_scalars {
           ).
 }.
 
+function clip_vector_euclidean {
+  Parameter vec, maxnorm.
+  If vec:mag <= maxnorm { Return vec. }.
+  Return maxnorm * vec:normalized.
+}.
+
+function clip_to_cone {
+  Parameter vec, cone_center, angular_radius.
+
+  Local current_angle to vang(vec, cone_center).
+  If current_angle <= angular_radius {
+    Return vec.
+  }.
+  Local mag to vec:mag.
+  Set vec to vxcl(cone_center, vec).
+
+  Return mag * (cone_center:normalized + tan(angular_radius) * vec:normalized).
+}.

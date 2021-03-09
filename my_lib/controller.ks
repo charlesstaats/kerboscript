@@ -150,6 +150,7 @@ Global function vector_derivative {
 Global function scalar_derivative {
   Local prev_time to -1.
   Local prev_value to 0.
+  Local prev_output to 0.
   Return {
     Parameter new_time.
     Parameter new_value.
@@ -162,12 +163,13 @@ Global function scalar_derivative {
     If delta_t <= 0 {
       Set prev_time to new_time.
       Set prev_value to new_value.
-      Return 0.
+      Return prev_output.
     }.
     Local delta_v to new_value - prev_value.
     Set prev_time to new_time.
     Set prev_value to new_value.
-    Return delta_v / delta_t.
+    Set prev_output to delta_v / delta_t.
+    Return prev_output.
   }.
 }.
 

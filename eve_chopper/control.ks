@@ -2,6 +2,7 @@
 
 RunOncePath("0:/my_lib/clip").
 RunOncePath("0:/my_lib/controller").
+//RunOncePath("0:/my_lib/lib_smoothing").
 
 AG1 on.  // Or toggle? Or directly set everything that needs setting?
 Brakes off.
@@ -113,16 +114,16 @@ On time:seconds {
   Set pre_rotation:x to 0.5 * pre_rotation:x.  // Adjust yaw authority.
   Set pre_rotation:y to pre_rotation:y.  // Adjust pitch authority.
   If ship:airspeed > 10 { Set pre_rotation:z to 2 * pre_rotation:z. }.  // Adjust roll authority.
-  Set pre_rotation to pre_rotation + integrator(time:seconds, pre_rotation).
-  If control:pilotyaw <> 0 {
-    Set pre_rotation:x to control:pilotyaw.
-  }.
-  If control:pilotpitch <> 0 {
-    Set pre_rotation:y to control:pilotpitch.
-  }.
-  If control:pilotroll <> 0 {
-    Set pre_rotation:z to control:pilotroll.
-  }.
+  Set pre_rotation to pre_rotation + 2 * integrator(time:seconds, pre_rotation).
+//  If control:pilotyaw <> 0 {
+//    Set pre_rotation:x to control:pilotyaw.
+//  }.
+//  If control:pilotpitch <> 0 {
+//    Set pre_rotation:y to control:pilotpitch.
+//  }.
+//  If control:pilotroll <> 0 {
+//    Set pre_rotation:z to control:pilotroll.
+//  }.
   Set control:rotation to pre_rotation.
 
   Local yaw to control:yaw.
@@ -145,20 +146,37 @@ On time:seconds {
 
 Wait until AG7 <> former_ag7.
 
+Local heat_shield to ship:partsDubbedPattern("HeatShield")[0].
+Local ablator_deriv to scalar_derivative().
+//Local throttle_smoother to lib_smoothing:rate_limited(1.0).
+
 Wait 0.1.
 Set control:neutralize to true.
-Lock steering to ship:up:vector.
-Set control:pilotmainthrottle to 1.0.
+Local GRAVTURN_ANGLE to 18.
+Lock steering to heading(90, 90 - GRAVTURN_ANGLE).
+Local throttle_on to true.
+When true then {
+  If throttle_on {
+    Local ablator_change to ablator_deriv(time:seconds, heat_shield:resources[0]:amount).
+    Set control:pilotmainthrottle to clip(1.0 + 20 * ablator_change, 0.1, 1.0).
+    Print ablator_change.
+  } else {
+    Print "Throttle off.".
+  }.
+  Return throttle_on.
+}.
 Until ship:availableThrust > 0 {
   Stage.
   Wait 0.1.
 }.
-Wait until ship:verticalspeed > 100.
-Local GRAVTURN_ANGLE to 10.
-Lock steering to heading(90, 90 - GRAVTURN_ANGLE).
-Wait until vang(ship:velocity:surface, ship:up:vector) > GRAVTURN_ANGLE.
+// IDEA: Throttle based on ablator resource change.
+Wait until ship:verticalspeed > 100 and eta:apoapsis > 20.
 Lock steering to ship:srfprograde.
+When ship:availableThrust = 0 then {
+  Stage.
+}.
 Wait until ship:orbit:apoapsis >= 95_000.
+Set throttle_on to false.
 Set control:pilotmainthrottle to 0.
 Unlock steering.
 Print "Script finished. You're on your own now.".
